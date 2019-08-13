@@ -1,0 +1,17 @@
+; vim: ft=scheme
+((author "siiky")
+ (license "unlicense")
+ (synopsis "Transmission RPC calls")
+ (version "0.0.1")
+ (dependencies
+   http-client
+   intarweb
+   json
+   srfi-1
+   uri-common)
+ (component-options (csc-options "-O0" "-d3"))
+ (components
+   (extension transmission
+              (types-file)
+              (modules transmission)
+              (source transmission.scm))))
