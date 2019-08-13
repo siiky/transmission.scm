@@ -57,7 +57,7 @@
   (define *host* (make-parameter "localhost" (assert* '*host* "a string" string?)))
 
   ;;; RPC Parameters
-  ;;; @see https://github.com/transmission/transmission/wiki/Editing-Configuration-Files
+  ;;; @see https://github.com/transmission/transmission/wiki/Editing-Configuration-Files#rpc
 
   ;; rpc-url
   (define *url* (make-parameter '(/ "transmission" "rpc")))
