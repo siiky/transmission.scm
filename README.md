@@ -40,6 +40,14 @@ This parameter is optional. If not set, Transmission will reply with a `409`, an
 
 The core procedure to make RPC calls. See the source for details.
 
+### 3.1 Torrent Action
+
+ * `(torrent-reannounce #!key tag ids)`
+ * `(torrent-start      #!key tag ids)`
+ * `(torrent-start-now  #!key tag ids)`
+ * `(torrent-stop       #!key tag ids)`
+ * `(torrent-verify     #!key tag ids)`
+
 ## Resources
 
  * [RPC Wiki Page][rpc-wiki]

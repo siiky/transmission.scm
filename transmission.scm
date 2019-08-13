@@ -1,13 +1,23 @@
 (module
   transmission
   (
+   ;; Parameters
    *host*
    *password*
    *port*
    *session-id*
    *url*
    *username*
+
+   ;; Core procedure
    rpc-call
+
+   ;; 3.1 Torrent actions
+   torrent-reannounce
+   torrent-start
+   torrent-start-now
+   torrent-stop
+   torrent-verify
    )
 
   (import
@@ -79,6 +89,9 @@
   (define *session-id*
     (make-parameter #f (assert* '*session-id* "a string or #f" (or? not string?))))
 
+  (define (filter-arguments arguments)
+    (filter (lambda (arg) (and arg (cdr arg))) arguments))
+
   ;; @brief Make an RPC call to a Transmission daemon
   ;; @param method A string naming an RPC method
   ;; @param arguments The arguments of this method
@@ -112,11 +125,11 @@
 
     (define (make-content method arguments tag)
       (define (content-req method arguments tag)
-        (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
+        (let ((optional (filter-arguments `((arguments . ,arguments) (tag . ,tag)))))
           (list->vector `((method . ,method) . ,optional))))
 
-      (let ((content-req (content-req method arguments tag)))
-        (with-output-to-string (cut json-write content-req))))
+      (with-output-to-string
+        (cut json-write (content-req method arguments tag))))
 
     (define (call-int host url port username password method arguments tag)
       (let ((req (make-req host url port username password))
@@ -153,11 +166,55 @@
           (url (*url*))
           (port (*port*))
           (username (*username*))
-          (password (*password*)))
+          (password (*password*))
+          (arguments (and arguments
+                          (if (zero? (vector-length arguments))
+                              #f
+                              arguments))))
       (and host url port
            (or (and username password)
                (not (or username password)))
            (call-int host url port username password method arguments tag))))
 
   ;; TODO: Define convenience functions for common RPC calls
+
+  ;; @brief Take an `ids` argument and return it ready to be embedded in the
+  ;;        arguments vector
+  ;; @param ids The `ids` argument as described in 3.1
+  ;; @returns A pair `("ids" . ,ids) or #f
+  ;; @see 3.1. Torrent Action Requests
+  (define (ids->arguments ids)
+    (let* ((ids (cond ((or (not ids) ; false?
+                           (string? ids)
+                           (pair? ids))
+                       ids)
+                      ((and (vector? ids)
+                            (positive? (vector-length ids)))
+                       (vector->list ids))
+                      (else #f)))
+           (ids (and ids
+                     (if (string? ids)
+                         ids
+                         (map (lambda (x) (or (string->number x) x)) ids)))))
+      (and ids `("ids" . ,ids))))
+
+  ;;;
+  ;;; 3.1 Torrent Actions
+  ;;;
+
+  (define-syntax define-3.1
+    (syntax-rules ()
+      ((define-3.1 method)
+       (define method
+         (let ((method-str (symbol->string 'method)))
+           (lambda (#!key (tag #f) (ids #f))
+             (let ((id-arguments (ids->arguments ids)))
+               (let ((arguments (list->vector (filter-arguments `(,id-arguments)))))
+                 (rpc-call method-str #:arguments arguments #:tag tag)))))))))
+
+  (define-3.1 torrent-start)
+  (define-3.1 torrent-start-now)
+  (define-3.1 torrent-stop)
+  (define-3.1 torrent-verify)
+  (define-3.1 torrent-reannounce)
   )
