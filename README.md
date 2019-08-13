@@ -1,6 +1,6 @@
 # transmission.scm
 
-[Transmission][transmission] v3 RPC in Scheme
+[Transmission][transmission] (v3) [RPC][rpc-wiki] (v16) in Scheme
 
 ## Example
 
@@ -8,6 +8,37 @@
 chicken-install -n
 csi -s example.scm your-rpc-username your-rpc-password
 ```
+
+## API
+
+### RPC Settings
+
+| transmission.scm | RPC Settings   | Default                     |
+| :--------------: | :------------: | :-------------------------: |
+| `*url*`          | `rpc-url`      | `'(/ "transmission" "rpc")` |
+| `*port*`         | `rpc-port`     | `9091`                      |
+| `*username*`     | `rpc-username` | `#f`                        |
+| `*password*`     | `rpc-password` | `#f`                        |
+
+### `*url*`
+
+`*url*` is not `rpc-url` directly, but is derived from it. E.g., if
+`rpc-url="/some/path/"`, then `*url*` should be `'(/ "some" "path" "rpc")`.
+
+### `*host*`
+
+The hostname of the Transmission RPC server. Defaults to `localhost`.
+
+### `*session-id*`
+
+The `X-Transmission-Session-Id` header. See section **2.3.1** of the [spec][rpc-spec].
+
+This parameter is optional. If not set, Transmission will reply with a `409`, and the correct
+`X-Transmission-Session-Id` will be set.
+
+### `rpc-call`
+
+The core procedure to make RPC calls. See the source for details.
 
 ## Resources
 
