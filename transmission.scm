@@ -12,12 +12,7 @@
    ;; Core procedure
    rpc-call
 
-   ;; 3.1 Torrent actions
-   torrent-reannounce
-   torrent-start
-   torrent-start-now
-   torrent-stop
-   torrent-verify
+   define-rpc-call
    )
 
   (import
@@ -32,6 +27,8 @@
           condition-case
           get-condition-property
           signal)
+    (only chicken.module
+          export)
     (only chicken.port
           with-output-to-string))
 
@@ -88,6 +85,14 @@
   ;; @see https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt
   (define *session-id*
     (make-parameter #f (assert* '*session-id* "a string or #f" (or? not string?))))
+
+  (define (just x)     `(just . ,x))
+  (define nothing      'nothing)
+  (define (just? x)    (and (pair? x) (eq? (car x) 'just)))
+  (define (nothing? x) (eq? x nothing))
+  (define (maybe? x)   (or (nothing? x) (just? x)))
+  (define (unwrap x)   (cdr x))
+  (define (maybe f x)  (if (just? x) (just (f (unwrap x))) nothing))
 
   (define (filter-arguments arguments)
     (filter (lambda (arg) (and arg (cdr arg))) arguments))
@@ -176,7 +181,11 @@
                (not (or username password)))
            (call-int host url port username password method arguments tag))))
 
-  ;; TODO: Define convenience functions for common RPC calls
+  ;;;
+  ;;; General & common utilities
+  ;;;
+
+  ;; TODO: How to handle boolean values
 
   ;; @brief Take an `ids` argument and return it ready to be embedded in the
   ;;        arguments vector
@@ -198,23 +207,48 @@
                          (map (lambda (x) (or (string->number x) x)) ids)))))
       (and ids `("ids" . ,ids))))
 
-  ;;;
-  ;;; 3.1 Torrent Actions
-  ;;;
+  (define (fields->arguments fields)
+    (and fields `("fields" . ,fields)))
 
-  (define-syntax define-3.1
+  ;; TODO: [WIP] Basic definitions seem to work
+  (define-syntax define-rpc-call
     (syntax-rules ()
-      ((define-3.1 method)
-       (define method
-         (let ((method-str (symbol->string 'method)))
-           (lambda (#!key (tag #f) (ids #f))
-             (let ((id-arguments (ids->arguments ids)))
-               (let ((arguments (list->vector (filter-arguments `(,id-arguments)))))
-                 (rpc-call method-str #:arguments arguments #:tag tag)))))))))
+      ((define-rpc-call (method (required required-handler) ...) (key default key-handler) ...)
+       (begin
+         (export method)
+         (define method
+           (let ((method-str (symbol->string 'method)))
+             (lambda (required ... #!key (tag #f) (key default) ...)
+               (let ((required (required-handler required)) ...
+                                                            (key (key-handler key)) ...)
+                 (let ((arguments (list->vector (filter-arguments `(,required ... ,key ...)))))
+                   (rpc-call method-str #:arguments arguments #:tag tag))))))))))
 
-  (define-3.1 torrent-start)
-  (define-3.1 torrent-start-now)
-  (define-3.1 torrent-stop)
-  (define-3.1 torrent-verify)
-  (define-3.1 torrent-reannounce)
+  (define-syntax define-3.1/4.6
+    (syntax-rules ()
+      ((define-3.1/4.6 method)
+       (define-rpc-call (method) (ids #f ids->arguments)))))
+
+  (define-syntax define-noargs
+    (syntax-rules ()
+      ((define-noargs method)
+       (define-rpc-call (method)))))
+
+  (define-rpc-call (torrent-get (fields fields->arguments)) (ids #f ids->arguments))
+  (define-rpc-call (session-get) (ids #f ids->arguments) (fields #f fields->arguments))
+
+  (define-noargs blocklist-update)
+  (define-noargs session-stats)
+  (define-noargs port-test)
+  (define-noargs session-close)
+
+  (define-3.1/4.6 queue-move-bottom)
+  (define-3.1/4.6 queue-move-down)
+  (define-3.1/4.6 queue-move-top)
+  (define-3.1/4.6 queue-move-up)
+  (define-3.1/4.6 torrent-reannounce)
+  (define-3.1/4.6 torrent-start)
+  (define-3.1/4.6 torrent-start-now)
+  (define-3.1/4.6 torrent-stop)
+  (define-3.1/4.6 torrent-verify)
   )

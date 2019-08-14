@@ -32,8 +32,7 @@
       '()))
 
 (define (torrent-get-example args)
-  (let ((result (rpc-call "torrent-get" #:tag (unique-tag)
-                          #:arguments '#(("fields" . ("id" "totalSize"))))))
+  (let ((result (torrent-get '("id" "totalSize"))))
     (print-result result (lambda (pn) (print pn  " [USERNAME PASSWORD]")))))
 
 (define (torrent-start-example args)
