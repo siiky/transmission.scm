@@ -21,8 +21,10 @@
           assert
           cut
           fixnum?
+          identity
           make-parameter
-          print)
+          print
+          when)
     (only chicken.condition
           condition-case
           get-condition-property
@@ -93,9 +95,14 @@
   (define (maybe? x)   (or (nothing? x) (just? x)))
   (define (unwrap x)   (cdr x))
   (define (maybe f x)  (if (just? x) (just (f (unwrap x))) nothing))
-
-  (define (filter-arguments arguments)
-    (filter (lambda (arg) (and arg (cdr arg))) arguments))
+  (define (->maybe b) (if b (just b) nothing))
+  (define (maybe-do . procs)
+    (lambda (x)
+      (let loop ((x x) (procs procs))
+        (cond
+          ((null? procs) x)
+          ((nothing? x) nothing)
+          (else (loop ((car procs) (unwrap x)) (cdr procs)))))))
 
   ;; @brief Make an RPC call to a Transmission daemon
   ;; @param method A string naming an RPC method
@@ -130,7 +137,7 @@
 
     (define (make-content method arguments tag)
       (define (content-req method arguments tag)
-        (let ((optional (filter-arguments `((arguments . ,arguments) (tag . ,tag)))))
+        (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
           (list->vector `((method . ,method) . ,optional))))
 
       (with-output-to-string
@@ -173,9 +180,8 @@
           (username (*username*))
           (password (*password*))
           (arguments (and arguments
-                          (if (zero? (vector-length arguments))
-                              #f
-                              arguments))))
+                          (positive? (vector-length arguments))
+                          arguments)))
       (and host url port
            (or (and username password)
                (not (or username password)))
@@ -187,28 +193,55 @@
 
   ;; TODO: How to handle boolean values
 
-  ;; @brief Take an `ids` argument and return it ready to be embedded in the
-  ;;        arguments vector
-  ;; @param ids The `ids` argument as described in 3.1
-  ;; @returns A pair `("ids" . ,ids) or #f
-  ;; @see 3.1. Torrent Action Requests
-  (define (ids->arguments ids)
-    (let* ((ids (cond ((or (not ids) ; false?
-                           (string? ids)
-                           (pair? ids))
-                       ids)
-                      ((and (vector? ids)
-                            (positive? (vector-length ids)))
-                       (vector->list ids))
-                      (else #f)))
-           (ids (and ids
-                     (if (string? ids)
-                         ids
-                         (map (lambda (x) (or (string->number x) x)) ids)))))
-      (and ids `("ids" . ,ids))))
+  (define false? not)
 
-  (define (fields->arguments fields)
-    (and fields `("fields" . ,fields)))
+  ; pre-proc :: x -> Maybe y
+  (define (make-*->arguments key pre-proc)
+    (lambda (x)
+      (let ((x (pre-proc x)))
+        (and (just? x) `(,key . ,(unwrap x))))))
+
+  (define (pre-proc-id id)
+    (if id
+        (cond
+          ((string? id)
+           (just id))
+          ((fixnum? id)
+           (number->string id))
+          (else nothing))
+        nothing))
+
+  ; ids :: Either String [ID]
+  (define (pre-proc-ids ids)
+    ((maybe-do
+       ; Handle string ("recently-active") and list or vector of strings (hash)
+       ;   and integers (id)
+       (lambda (ids)
+         (->maybe
+           (cond
+             ((or (string? ids)
+                  (pair? ids))
+              ids)
+             ((and (vector? ids)
+                   (positive? (vector-length ids)))
+              (vector->list ids))
+             (else #f))))
+
+       (lambda (ids)
+         (just (if (string? ids)
+                   ids
+                   (map unwrap (filter just? (map pre-proc-id ids)))))))
+
+     (->maybe ids)))
+
+  (define (pre-proc-list-of-strings strs)
+    (when strs (for-each (lambda (str) (assert (string? str))) strs))
+    (->maybe strs))
+
+  (define pre-proc-fields pre-proc-list-of-strings)
+
+  (define ids->arguments    (make-*->arguments 'ids    pre-proc-ids))
+  (define fields->arguments (make-*->arguments 'fields pre-proc-fields))
 
   ;; TODO: [WIP] Basic definitions seem to work
   (define-syntax define-rpc-call
@@ -219,9 +252,8 @@
          (define method
            (let ((method-str (symbol->string 'method)))
              (lambda (required ... #!key (tag #f) (key default) ...)
-               (let ((required (required-handler required)) ...
-                                                            (key (key-handler key)) ...)
-                 (let ((arguments (list->vector (filter-arguments `(,required ... ,key ...)))))
+               (let ((required (required-handler required)) ... (key (key-handler key)) ...)
+                 (let ((arguments (list->vector (filter identity `(,required ... ,key ...)))))
                    (rpc-call method-str #:arguments arguments #:tag tag))))))))))
 
   (define-syntax define-3.1/4.6
@@ -235,7 +267,7 @@
        (define-rpc-call (method)))))
 
   (define-rpc-call (torrent-get (fields fields->arguments)) (ids #f ids->arguments))
-  (define-rpc-call (session-get) (ids #f ids->arguments) (fields #f fields->arguments))
+  (define-rpc-call (session-get) (fields #f fields->arguments) (ids #f ids->arguments))
 
   (define-noargs blocklist-update)
   (define-noargs session-stats)
