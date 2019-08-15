@@ -96,15 +96,21 @@
   (define (nothing? x) (eq? x nothing))
   (define (maybe? x)   (or (nothing? x) (just? x)))
   (define (unwrap x)   (cdr x))
-  (define (maybe f x)  (if (just? x) (just (f (unwrap x))) nothing))
-  (define (->maybe b) (if b (just b) nothing))
+  (define (->maybe b)  (if b (just b) nothing))
+
+  (define (maybe f x)
+    (cond
+      ((just? x) (just (f (unwrap x))))
+      ((nothing? x) nothing)
+      (else (f x))))
+
   (define (maybe-do . procs)
     (lambda (x)
       (let loop ((x x) (procs procs))
         (cond
           ((null? procs) x)
           ((nothing? x) nothing)
-          (else (loop ((car procs) (unwrap x)) (cdr procs)))))))
+          (else (loop (maybe (car procs) x) (cdr procs)))))))
 
   ;; @brief Make an RPC call to a Transmission daemon
   ;; @param method A string naming an RPC method
@@ -247,12 +253,11 @@
        (lambda (ids)
          (->maybe
            (cond
-             ((or (id? ids)
-                  (pair? ids))
-              ids)
+             ((id? ids) ids)
              ((and (vector? ids)
                    (positive? (vector-length ids)))
               (vector->list ids))
+             ((list? ids) ids)
              (else #f))))
 
        (lambda (ids)
@@ -260,21 +265,23 @@
                    ids
                    (map unwrap (filter just? (map pre-proc-id ids)))))))
 
-     (->maybe ids)))
+     ids))
 
   (define (pre-proc-array array)
     (->maybe
       (cond
         ; The json egg serializes scheme lists as JSON arrays
-        ((or (false? array) (list? array)) array)
         ((vector? array) (vector->list array))
+        ((list? array) array)
         (else #f))))
 
   (define (pre-proc-list-of-strings strs)
-    (->maybe ((assert* 'pre-proc-list-of-strings
-                       "a list of strings or #f"
-                       (or? false? (cut every string? <>)))
-              strs)))
+    (->maybe
+      ((assert*
+         'pre-proc-list-of-strings
+         "a list of strings or #f"
+         (or? false? (cut every string? <>)))
+       strs)))
 
   (define pre-proc-fields pre-proc-list-of-strings)
 
@@ -387,11 +394,40 @@
 
   (export-rpc-call (torrent-get (fields fields->arguments)) (ids #f ids->arguments))
 
-  ; TODO: Add missing procedures:
-  ; torrent-add
-  ; torrent-remove
-  ; torrent-set-location
-  ; torrent-rename-path
+  ; As per the spec, either filename or metainfo must be given
+  ; (torrent-add #f           "<info>")
+  ; (torrent-add "<filename>" #f)
+  ; TODO: Improve this; make it a pre-call error to provide neither or both
+  (export-rpc-call
+    (torrent-add
+      (filename (make-string->arguments 'filename))
+      (metainfo (make-string->arguments 'metainfo)))
+    (cookies            #f      (make-string->arguments 'cookies))
+    (download-dir       #f      (make-string->arguments 'download-dir))
+    (paused             nothing (make-bool->arguments   'paused))
+    (peer-limit         #f      (make-number->arguments 'peer-limit))
+    (bandwidth-priority #f      (make-number->arguments 'bandwidthPriority))
+    (files-wanted       #f      (make-array->arguments  'files-wanted))
+    (files-unwanted     #f      (make-array->arguments  'files-unwanted))
+    (priority-high      #f      (make-array->arguments  'priority-high))
+    (priority-low       #f      (make-array->arguments  'priority-low))
+    (priority-normal    #f      (make-array->arguments  'priority-normal)))
+
+  (export-rpc-call
+    (torrent-remove (ids ids->arguments))
+    (delete-local-data nothing (make-bool->arguments 'delete-local-data)))
+
+  (export-rpc-call
+    (torrent-set-location
+      (ids ids->arguments)
+      (location (make-string->arguments 'location)))
+    (move nothing (make-bool->arguments 'move)))
+
+  (export-rpc-call
+    (torrent-rename-path
+      (ids ids->arguments)
+      (path (make-string->arguments 'path))
+      (name (make-string->arguments 'name))))
 
   (export-rpc-call
     session-set
