@@ -1,7 +1,6 @@
 (module
   transmission
   (
-   ;; Parameters
    *host*
    *password*
    *port*
@@ -9,10 +8,11 @@
    *url*
    *username*
 
-   ;; Core procedure
    rpc-call
 
+   make-rpc-call
    define-rpc-call
+   export-rpc-call
    )
 
   (import
@@ -23,8 +23,7 @@
           fixnum?
           identity
           make-parameter
-          print
-          when)
+          print)
     (only chicken.condition
           condition-case
           get-condition-property
@@ -47,6 +46,7 @@
           json-read
           json-write)
     (only srfi-1
+          every
           filter)
     (only uri-common
           make-uri))
@@ -55,6 +55,8 @@
     (lambda (x)
       (assert (type? x) loc "Expected " type ", but got " x)
       x))
+
+  (define false? not)
 
   (define (or? . rest)
     (lambda (x)
@@ -77,16 +79,16 @@
 
   ;; rpc-username
   (define *username*
-    (make-parameter #f (assert* '*username* "a string or #f" (or? not string?))))
+    (make-parameter #f (assert* '*username* "a string or #f" (or? false? string?))))
 
   ;; rpc-password
   (define *password*
-    (make-parameter #f (assert* '*password* "a string or #f" (or? not string?))))
+    (make-parameter #f (assert* '*password* "a string or #f" (or? false? string?))))
 
   ;; 2.3.1 X-Transmission-Session-Id
   ;; @see https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt
   (define *session-id*
-    (make-parameter #f (assert* '*session-id* "a string or #f" (or? not string?))))
+    (make-parameter #f (assert* '*session-id* "a string or #f" (or? false? string?))))
 
   (define (just x)     `(just . ,x))
   (define nothing      'nothing)
@@ -122,57 +124,77 @@
   ;;
   ;; See the json egg for how to encode arguments and decode responses.
   (define (rpc-call method #!key (arguments #f) (tag #f))
-    (define (make-req host url port username password)
-      (let ((uri (make-uri #:scheme 'http
-                           #:host host
-                           #:port port
-                           #:path url
-                           #:username username
-                           #:password password)))
+    (define (call host url port username password method arguments tag)
+
+      ;; @brief Create a request object
+      ;; @param host The hostname of the RPC server
+      ;; @param url See `rpc-url`
+      ;; @param port See `rpc-port`
+      ;; @param username See `rpc-username`
+      ;; @param password See `rpc-password`
+      ;; @returns A request object
+      ;;
+      ;; @a username and @a password are only required if
+      ;;   `rpc-authentication-required` is enabled
+      (define (make-req host url port username password)
         (make-request #:method 'POST
-                      #:uri uri
+                      #:uri
+                      (make-uri #:scheme 'http
+                                #:host host
+                                #:port port
+                                #:path url
+                                #:username username
+                                #:password password)
                       ; NOTE: Not sure, but x-transmission-session-id set to #f
                       ;       seems to work
-                      #:headers (headers `((x-transmission-session-id ,(*session-id*)))))))
+                      #:headers (headers `((x-transmission-session-id ,(*session-id*))))))
 
-    (define (make-content method arguments tag)
-      (define (content-req method arguments tag)
-        (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
-          (list->vector `((method . ,method) . ,optional))))
+      ;; @brief Serialize a message, according to the spec
+      ;; @param method The `method` field
+      ;; @param arguments The `arguments` field
+      ;; @param tag The `tag` field
+      ;; @returns A string of the serialized JSON message
+      (define (make-message method arguments tag)
+        (define (message-req method arguments tag)
+          (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
+            (list->vector `((method . ,method) . ,optional))))
 
-      (with-output-to-string
-        (cut json-write (content-req method arguments tag))))
+        (with-output-to-string
+          (cut json-write (message-req method arguments tag))))
 
-    (define (call-int host url port username password method arguments tag)
+      ;; @brief Handle 409, according to the spec
+      ;; @param con The condition object
+      ;; @param message The RPC message
+      ;; @returns The deserialized response of the RPC call
+      ;;
+      ;; If an error other than 409 occurs, the exception is propagated
+      (define (client-error-handler con message)
+        (let ((response (get-condition-property con 'client-error 'response)))
+
+          ; See 2.3.1 for how to handle 409
+          (cond
+
+            ; The condition object may not have a response property, in which
+            ;   case, it is not a 409
+            ((and response
+                  (= (response-code response) 409))
+             (let ((session-id (car (header-values 'x-transmission-session-id (response-headers response)))))
+               ;(print "GOT A 409!")
+               (*session-id* session-id)
+               (let ((req (make-req host url port username password)))
+                 (with-input-from-request req message json-read))))
+
+            ; Rethrow any other errors
+            (else
+              ;(print "NOT A 409!")
+              (signal con)))))
+
       (let ((req (make-req host url port username password))
-            (content (make-content method arguments tag)))
-
-        (define (client-error-handler con)
-          (let ((response (get-condition-property con 'client-error 'response)))
-
-            ; See 2.3.1 for how to handle 409
-            (cond
-
-              ; The condition object may not have a resonse property, in which
-              ;   case, it is not a 409
-              ((and response
-                    (= (response-code response) 409))
-               (let ((session-id (car (header-values 'x-transmission-session-id (response-headers response)))))
-                 ;(print "GOT A 409!")
-                 (*session-id* session-id)
-                 (let ((req (make-req host url port username password)))
-                   (with-input-from-request req content json-read))))
-
-              ; Rethrow any other errors
-              (else
-                ;(print "NOT A 409!")
-                ; Is signal the right way?
-                (signal con)))))
-
+            (message (make-message method arguments tag)))
         (condition-case
-          (with-input-from-request req content json-read)
+          (with-input-from-request req message json-read)
           (con (exn http client-error) ; 409 is in this condition kind
-               (client-error-handler con)))))
+               (client-error-handler con message)))))
 
     (let ((host (*host*))
           (url (*url*))
@@ -185,33 +207,39 @@
       (and host url port
            (or (and username password)
                (not (or username password)))
-           (call-int host url port username password method arguments tag))))
+           (call host url port username password method arguments tag))))
 
   ;;;
   ;;; General & common utilities
   ;;;
 
-  ;; TODO: How to handle boolean values
-
-  (define false? not)
-
-  ; pre-proc :: x -> Maybe y
+  ;; @brief Make a function that returns #f or an argument pair
+  ;; @param key The argument's key
+  ;; @param pre-proc Function that pre-processes an input value
+  ;; @returns A function that, from an input value, returns #f or an argument pair
+  ;;
+  ;; @a pre-proc must return a Maybe. If the result of pre-proc is Nothing, the
+  ;;   result is #f, and if the result is Just, then it returns an argument pair.
   (define (make-*->arguments key pre-proc)
     (lambda (x)
       (let ((x (pre-proc x)))
         (and (just? x) `(,key . ,(unwrap x))))))
 
-  (define (pre-proc-id id)
-    (if id
-        (cond
-          ((string? id)
-           (just id))
-          ((fixnum? id)
-           (number->string id))
-          (else nothing))
-        nothing))
+  (define (id? id)
+    (or (string? id) (fixnum? id)))
 
-  ; ids :: Either String [ID]
+  ;; @brief Pre-process an ID
+  ;; @param id An ID
+  ;; @returns A Maybe
+  (define (pre-proc-id id)
+    (->maybe
+      (and id
+           (or (string? id) (fixnum? id))
+           id)))
+
+  ;; @brief Pre-process a list of IDs
+  ;; @param ids A list of IDs
+  ;; @returns A Maybe
   (define (pre-proc-ids ids)
     ((maybe-do
        ; Handle string ("recently-active") and list or vector of strings (hash)
@@ -219,7 +247,7 @@
        (lambda (ids)
          (->maybe
            (cond
-             ((or (string? ids)
+             ((or (id? ids)
                   (pair? ids))
               ids)
              ((and (vector? ids)
@@ -228,59 +256,200 @@
              (else #f))))
 
        (lambda (ids)
-         (just (if (string? ids)
+         (just (if (id? ids)
                    ids
                    (map unwrap (filter just? (map pre-proc-id ids)))))))
 
      (->maybe ids)))
 
+  (define (pre-proc-array array)
+    (->maybe
+      (cond
+        ; The json egg serializes scheme lists as JSON arrays
+        ((or (false? array) (list? array)) array)
+        ((vector? array) (vector->list array))
+        (else #f))))
+
   (define (pre-proc-list-of-strings strs)
-    (when strs (for-each (lambda (str) (assert (string? str))) strs))
-    (->maybe strs))
+    (->maybe ((assert* 'pre-proc-list-of-strings
+                       "a list of strings or #f"
+                       (or? false? (cut every string? <>)))
+              strs)))
 
   (define pre-proc-fields pre-proc-list-of-strings)
 
-  (define ids->arguments    (make-*->arguments 'ids    pre-proc-ids))
-  (define fields->arguments (make-*->arguments 'fields pre-proc-fields))
+  ;; TODO: Strict version
+  (define pre-proc-object ->maybe)
 
-  ;; TODO: [WIP] Basic definitions seem to work
+  (define (pre-proc-bool b) (just (and (just? b) (unwrap b))))
+  (define (pre-proc-string str) (->maybe (and str (string? str) str)))
+  (define (pre-proc-number n) (->maybe (and n (number? n) n)))
+
+  (define ids->arguments (make-*->arguments 'ids pre-proc-ids))
+  (define fields->arguments (make-*->arguments 'fields pre-proc-fields))
+  (define (make-number->arguments key) (make-*->arguments key pre-proc-number))
+  (define (make-string->arguments key) (make-*->arguments key pre-proc-string))
+  (define (make-bool->arguments key) (make-*->arguments key pre-proc-bool))
+  (define (make-array->arguments key) (make-*->arguments key pre-proc-array))
+
+  ;; @brief Create an RPC procedure
+  ;; @param method The name of the RPC method
+  ;; @param required A required parameter
+  ;; @param required-handler A handler for a required parameter
+  ;; @param key A key parameter
+  ;; @param default The default value for a key parameter
+  ;; @param key-handler A handler for a key parameter
+  ;; @returns An RPC procedure
+  ;;
+  ;; This macro defines and exports an RPC procedure described by the given
+  ;;   parameters.
+  ;;
+  ;; On top of the given key parameters, every RPC procedure has the `tag` key
+  ;;   parameter, as per the RPC spec.
+  ;;
+  ;; All handlers (both required and key) must return either #f or a pair. This
+  ;;   pair is the key and associated value of an RPC call argument.
+  ;;
+  ;; Examples:
+  ;;
+  ;; A call of no arguments (other than `tag`)
+  ;;   (make-rpc-call some-method)
+  ;;
+  ;; A call with one required argument `fields` and one key argument `ids`
+  ;;   (make-rpc-call (some-method (fields fields->arguments)) (ids #f ids->arguments))
+  (define-syntax make-rpc-call
+    (syntax-rules ()
+      ((make-rpc-call (method (required required-handler) ...) (key default key-handler) ...)
+       (let ((method-str (symbol->string 'method)))
+         (lambda (required ... #!key (tag #f) (key default) ...)
+           (let ((required (required-handler required)) ... (key (key-handler key)) ...)
+             (let ((arguments (list->vector (filter identity `(,required ... ,key ...)))))
+               (rpc-call method-str #:arguments arguments #:tag tag))))))
+      ((make-rpc-call method (key default key-handler) ...)
+       (make-rpc-call (method) (key default key-handler) ...))))
+
+  ;; Like `make-rpc-call` but defines the created procedure
   (define-syntax define-rpc-call
     (syntax-rules ()
-      ((define-rpc-call (method (required required-handler) ...) (key default key-handler) ...)
+      ((define-rpc-call (method required ...) key ...)
+       (define method (make-rpc-call (method required ...) key ...)))
+      ((define-rpc-call method key ...)
+       (define-rpc-call (method) key ...))))
+
+  ;; Like `define-rpc-call` but exports the defined procedure
+  (define-syntax export-rpc-call
+    (syntax-rules ()
+      ((export-rpc-call (method required ...) key ...)
        (begin
          (export method)
-         (define method
-           (let ((method-str (symbol->string 'method)))
-             (lambda (required ... #!key (tag #f) (key default) ...)
-               (let ((required (required-handler required)) ... (key (key-handler key)) ...)
-                 (let ((arguments (list->vector (filter identity `(,required ... ,key ...)))))
-                   (rpc-call method-str #:arguments arguments #:tag tag))))))))))
+         (define-rpc-call (method required ...) key ...)))
+      ((export-rpc-call method key ...)
+       (export-rpc-call (method) key ...))))
 
-  (define-syntax define-3.1/4.6
+  ;; Export RPC procedures of sections 3.1 and 4.6. These procedures have a
+  ;;   single optional parameter `ids`.
+  (define-syntax export-3.1/4.6
     (syntax-rules ()
-      ((define-3.1/4.6 method)
-       (define-rpc-call (method) (ids #f ids->arguments)))))
+      ((export-3.1/4.6 method)
+       (export-rpc-call method (ids #f ids->arguments)))))
 
-  (define-syntax define-noargs
-    (syntax-rules ()
-      ((define-noargs method)
-       (define-rpc-call (method)))))
+  (export-3.1/4.6 torrent-start)
+  (export-3.1/4.6 torrent-start-now)
+  (export-3.1/4.6 torrent-stop)
+  (export-3.1/4.6 torrent-verify)
+  (export-3.1/4.6 torrent-reannounce)
 
-  (define-rpc-call (torrent-get (fields fields->arguments)) (ids #f ids->arguments))
-  (define-rpc-call (session-get) (fields #f fields->arguments) (ids #f ids->arguments))
+  (export-rpc-call
+    torrent-set
+    (bandwidth-priority    #f      (make-number->arguments 'bandwidthPriority))
+    (download-limit        #f      (make-number->arguments 'downloadLimit))
+    (download-limited      nothing (make-bool->arguments   'downloadLimited))
+    (files-wanted          #f      (make-array->arguments  'files-wanted))
+    (files-unwanted        #f      (make-array->arguments  'files-unwanted))
+    (honors-session-limits nothing (make-bool->arguments   'honorsSessionLimits))
+    (ids                   #f      (make-array->arguments  'ids))
+    (labels                #f      (make-array->arguments  'labels))
+    (location              #f      (make-string->arguments 'location))
+    (peer-limit            #f      (make-number->arguments 'peer-limit))
+    (priority-high         #f      (make-array->arguments  'priority-high))
+    (priority-low          #f      (make-array->arguments  'priority-low))
+    (priority-normal       #f      (make-array->arguments  'priority-normal))
+    (queue-position        #f      (make-number->arguments 'queuePosition))
+    (seed-idle-limit       #f      (make-number->arguments 'seedIdleLimit))
+    (seed-idle-mode        #f      (make-number->arguments 'seedIdleMode))
+    (seed-ratio-limit      #f      (make-number->arguments 'seedRatioLimit))
+    (seed-ratio-mode       #f      (make-number->arguments 'seedRatioMode))
+    (tracker-add           #f      (make-array->arguments  'trackerAdd))
+    (tracker-remove        #f      (make-array->arguments  'trackerRemove))
+    (tracker-replace       #f      (make-array->arguments  'trackerReplace))
+    (upload-limit          #f      (make-number->arguments 'uploadLimit))
+    (upload-limited        nothing (make-bool->arguments   'uploadLimited)))
 
-  (define-noargs blocklist-update)
-  (define-noargs session-stats)
-  (define-noargs port-test)
-  (define-noargs session-close)
+  (export-rpc-call (torrent-get (fields fields->arguments)) (ids #f ids->arguments))
 
-  (define-3.1/4.6 queue-move-bottom)
-  (define-3.1/4.6 queue-move-down)
-  (define-3.1/4.6 queue-move-top)
-  (define-3.1/4.6 queue-move-up)
-  (define-3.1/4.6 torrent-reannounce)
-  (define-3.1/4.6 torrent-start)
-  (define-3.1/4.6 torrent-start-now)
-  (define-3.1/4.6 torrent-stop)
-  (define-3.1/4.6 torrent-verify)
+  ; TODO: Add missing procedures:
+  ; torrent-add
+  ; torrent-remove
+  ; torrent-set-location
+  ; torrent-rename-path
+
+  (export-rpc-call
+    session-set
+    (alt-speed-down               #f      (make-number->arguments 'alt-speed-down))
+    (alt-speed-enabled            nothing (make-bool->arguments   'alt-speed-enabled))
+    (alt-speed-time-begin         #f      (make-number->arguments 'alt-speed-time-begin))
+    (alt-speed-time-day           #f      (make-number->arguments 'alt-speed-time-day))
+    (alt-speed-time-enabled       nothing (make-bool->arguments   'alt-speed-time-enabled))
+    (alt-speed-time-end           #f      (make-number->arguments 'alt-speed-time-end))
+    (alt-speed-up                 #f      (make-number->arguments 'alt-speed-up))
+    (blocklist-enabled            nothing (make-bool->arguments   'blocklist-enabled))
+    (blocklist-url                #f      (make-string->arguments 'blocklist-url))
+    (cache-size-mb                #f      (make-number->arguments 'cache-size-mb))
+    (dht-enabled                  nothing (make-bool->arguments   'dht-enabled))
+    (download-dir                 #f      (make-string->arguments 'download-dir))
+    (download-queue-enabled       nothing (make-bool->arguments   'download-queue-enabled))
+    (download-queue-size          #f      (make-number->arguments 'download-queue-size))
+    (encryption                   #f      (make-string->arguments 'encryption))
+    (idle-seeding-limit           #f      (make-number->arguments 'idle-seeding-limit))
+    (idle-seeding-limit-enabled   nothing (make-bool->arguments   'idle-seeding-limit-enabled))
+    (incomplete-dir               #f      (make-string->arguments 'incomplete-dir))
+    (incomplete-dir-enabled       nothing (make-bool->arguments   'incomplete-dir-enabled))
+    (lpd-enabled                  nothing (make-bool->arguments   'lpd-enabled))
+    (peer-limit-global            #f      (make-number->arguments 'peer-limit-global))
+    (peer-limit-per-torrent       #f      (make-number->arguments 'peer-limit-per-torrent))
+    (peer-port                    #f      (make-number->arguments 'peer-port))
+    (peer-port-random-on-start    nothing (make-bool->arguments   'peer-port-random-on-start))
+    (pex-enabled                  nothing (make-bool->arguments   'pex-enabled))
+    (port-forwarding-enabled      nothing (make-bool->arguments   'port-forwarding-enabled))
+    (queue-stalled-enabled        nothing (make-bool->arguments   'queue-stalled-enabled))
+    (queue-stalled-minutes        #f      (make-number->arguments 'queue-stalled-minutes))
+    (rename-partial-files         nothing (make-bool->arguments   'rename-partial-files))
+    (script-torrent-done-enabled  nothing (make-bool->arguments   'script-torrent-done-enabled))
+    (script-torrent-done-filename #f      (make-string->arguments 'script-torrent-done-filename))
+    (seed-queue-enabled           nothing (make-bool->arguments   'seed-queue-enabled))
+    (seed-queue-size              #f      (make-number->arguments 'seed-queue-size))
+    (seed-ratio-limit             #f      (make-number->arguments 'seedRatioLimit))
+    (seed-ratio-limited           nothing (make-bool->arguments   'seedRatioLimited))
+    (speed-limit-down             #f      (make-number->arguments 'speed-limit-down))
+    (speed-limit-down-enabled     nothing (make-bool->arguments   'speed-limit-down-enabled))
+    (speed-limit-up               #f      (make-number->arguments 'speed-limit-up))
+    (speed-limit-up-enabled       nothing (make-bool->arguments   'speed-limit-up-enabled))
+    (start-added-torrents         nothing (make-bool->arguments   'start-added-torrents))
+    (trash-original-torrent-files nothing (make-bool->arguments   'trash-original-torrent-files))
+    (units                        #f      (make-*->arguments      'units pre-proc-object))
+    (utp-enabled                  nothing (make-bool->arguments   'utp-enabled)))
+
+  (export-rpc-call session-get (fields #f fields->arguments))
+
+  (export-rpc-call session-stats)
+  (export-rpc-call blocklist-update)
+  (export-rpc-call port-test)
+  (export-rpc-call session-close)
+
+  (export-3.1/4.6 queue-move-top)
+  (export-3.1/4.6 queue-move-up)
+  (export-3.1/4.6 queue-move-down)
+  (export-3.1/4.6 queue-move-bottom)
+
+  (export-rpc-call (free-space (path (make-string->arguments 'path))))
   )
