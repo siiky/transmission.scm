@@ -59,7 +59,7 @@
         (rest (maybe-rest-args args)))
     (parameterize ((*username* username)
                    (*password* password)
-                   (*session-id* #f)) ; 2.3.1 x-transmission-session-id
+                   (*session-id* "")) ; 2.3.1 x-transmission-session-id
       (torrent-get-example rest)
       ;(torrent-start-example rest)
       ;(torrent-stop-example rest)

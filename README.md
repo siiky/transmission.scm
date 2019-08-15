@@ -36,17 +36,42 @@ The `X-Transmission-Session-Id` header. See section **2.3.1** of the [spec][rpc-
 This parameter is optional. If not set, Transmission will reply with a `409`, and the correct
 `X-Transmission-Session-Id` will be set.
 
-### `rpc-call`
+### RPC Methods
+
+Every method of the [spec][rpc-spec] is defined, and naming is followed almost
+directly. In the [spec][rpc-spec], all methods and most arguments follow
+`kebab-case`. The exceptions are a few arguments in `camelCase`. These are
+converted to `kebab-case` in this egg. E.g. `queuePosition` is converted to
+`queue-position`.
+
+### Core Procedures
+
+#### `update-request-session-id`
+
+Updates a `request` object's `X-Transmission-Session-Id` header. See section
+**2.3.1** of the [spec][rpc-spec].
+
+#### `handle-409`
+
+Handles an exception caused by a `409` error. See section **2.3.1** of the
+[spec][rpc-spec].
+
+#### `serialize-message`
+
+Serialize an RPC message to JSON.
+
+#### `make-rpc-request`
+
+Convenience wrapper for `intarweb`'s `make-request`.
+
+#### `rpc-call`
 
 The core procedure to make RPC calls. See the source for details.
 
-### 3.1 Torrent Action
+## Contributing
 
- * `(torrent-reannounce #!key tag ids)`
- * `(torrent-start      #!key tag ids)`
- * `(torrent-start-now  #!key tag ids)`
- * `(torrent-stop       #!key tag ids)`
- * `(torrent-verify     #!key tag ids)`
+This egg is not very well tested (yet). If you have found a bug, a typo, or
+have any suggestions, open an issue or make a pull request.
 
 ## Resources
 

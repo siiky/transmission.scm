@@ -8,6 +8,11 @@
    *url*
    *username*
 
+   update-request-session-id
+   handle-409
+   serialize-message
+   make-rpc-request
+
    rpc-call
 
    make-rpc-call
@@ -31,7 +36,9 @@
     (only chicken.module
           export)
     (only chicken.port
-          with-output-to-string))
+          with-output-to-string)
+    (only chicken.string
+          ->string))
 
   (import
     (only http-client
@@ -41,7 +48,8 @@
           headers
           make-request
           response-code
-          response-headers)
+          response-headers
+          update-request)
     (only json
           json-read
           json-write)
@@ -53,7 +61,9 @@
 
   (define (assert* loc type type?)
     (lambda (x)
-      (assert (type? x) loc "Expected " type ", but got " x)
+      (assert
+        (type? x) loc
+        (string-append "Expected " type ", but got " (->string x)))
       x))
 
   (define false? not)
@@ -65,10 +75,12 @@
             ((car l) x)
             (loop (cdr l))))))
 
-  (define *host* (make-parameter "localhost" (assert* '*host* "a string" string?)))
-
+  ;;;
   ;;; RPC Parameters
   ;;; @see https://github.com/transmission/transmission/wiki/Editing-Configuration-Files#rpc
+  ;;;
+
+  (define *host* (make-parameter "localhost" (assert* '*host* "a string" string?)))
 
   ;; rpc-url
   (define *url* (make-parameter '(/ "transmission" "rpc")))
@@ -87,8 +99,127 @@
 
   ;; 2.3.1 X-Transmission-Session-Id
   ;; @see https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt
-  (define *session-id*
-    (make-parameter #f (assert* '*session-id* "a string or #f" (or? false? string?))))
+  (define *session-id* (make-parameter "" (assert* '*session-id* "a string" string?)))
+
+  ;;;
+  ;;; Core Procedures
+  ;;;
+
+  ;; @brief Create a request object
+  ;; @param host The hostname of the RPC server
+  ;; @param url See `rpc-url`
+  ;; @param port See `rpc-port`
+  ;; @param username See `rpc-username`
+  ;; @param password See `rpc-password`
+  ;; @param session-id The `x-transmission-session-id` header
+  ;; @returns A request object
+  ;;
+  ;; @a username and @a password are only required if
+  ;;   `rpc-authentication-required` is enabled
+  (define (make-rpc-request host url port username password #!optional (session-id (*session-id*)))
+    (make-request #:method 'POST
+                  #:uri
+                  (make-uri #:scheme 'http
+                            #:host host
+                            #:port port
+                            #:path url
+                            #:username username
+                            #:password password)
+                  #:headers (headers `((x-transmission-session-id ,session-id)))))
+
+  ;; @brief Serialize a message, according to the spec
+  ;; @param method The `method` field
+  ;; @param arguments The `arguments` field
+  ;; @param tag The `tag` field
+  ;; @returns A string of the serialized JSON message
+  (define (serialize-message method arguments tag)
+    (define (message-req method arguments tag)
+      (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
+        (list->vector `((method . ,method) . ,optional))))
+
+    (with-output-to-string
+      (cut json-write (message-req method arguments tag))))
+
+  ;; @brief Update a request's `x-transmission-session-id` header
+  ;; @param request The request
+  ;; @param session-id The new session ID
+  ;; @returns The new request
+  (define (update-request-session-id request #!optional (session-id (*session-id*)))
+    (update-request request #:headers (headers `((x-transmission-session-id ,session-id)))))
+
+  ;; @brief Handle 409, according to the spec
+  ;; @param condition The condition object
+  ;; @param request The request
+  ;; @param message The RPC message
+  ;; @returns The deserialized response of the RPC call
+  ;;
+  ;; If the condition is caused by anything other than 409, the exception is
+  ;;   propagated. In case of 409, the new session ID is read from the response
+  ;;   headers and we try again. If this second try results in an error, it is
+  ;;   propagated.
+  (define (handle-409 condition request message)
+    (let ((response (get-condition-property condition 'client-error 'response)))
+
+      ; See 2.3.1 for how to handle 409
+      (cond
+
+        ; The condition object may not have a response property, in which
+        ;   case, it is not a 409
+        ((and response
+              (= (response-code response) 409))
+         (let ((session-id (car (header-values 'x-transmission-session-id (response-headers response)))))
+           ;(print "GOT A 409!")
+           (*session-id* session-id)
+           (let ((req (update-request-session-id request session-id)))
+             (with-input-from-request req message json-read))))
+
+        ; Rethrow any other errors
+        (else
+          ;(print "NOT A 409!")
+          (signal condition)))))
+
+  ;; @brief Make an RPC call to a Transmission daemon
+  ;; @param method A string naming an RPC method
+  ;; @param arguments The arguments of this method
+  ;; @param tag The tag for this call
+  ;; @returns A response object read with json-read, or #f in case of wrong
+  ;;          parameters
+  ;;
+  ;; Throws exceptions for HTTP errors, except for 409, which is handled
+  ;;   according to 2.3.1; see http-client for other HTTP errors.
+  ;;
+  ;; `rpc-call` returns #f if parameters are wrong. Some parameters are
+  ;; mandatory (with defaults provided): `*host*`, `*url*`, `*port*`.
+  ;; Others are optional: `*session-id*`, `*password*`, `*username*`.
+  ;; `*password*` and `*username*` are, however, optional "together"; they must
+  ;; both be #f or a string.
+  ;;
+  ;; See the json egg for how to encode arguments and decode responses.
+  (define (rpc-call method #!key (arguments #f) (tag #f))
+    (define (call host url port username password method arguments tag)
+      (let ((req (make-rpc-request host url port username password))
+            (message (serialize-message method arguments tag)))
+        (condition-case
+          (with-input-from-request req message json-read)
+          (condition (exn http client-error) ; 409 is in this condition kind
+                     (handle-409 condition req message)))))
+
+    (let ((host (*host*))
+          (url (*url*))
+          (port (*port*))
+          (username (*username*))
+          (password (*password*))
+          (arguments (and arguments
+                          (positive? (vector-length arguments))
+                          arguments)))
+      (and host url port
+           (or (and username password)
+               (not (or username password)))
+           (call host url port username password method arguments tag))))
+
+  ;;;
+  ;;; General & Common Utilities
+  ;;;
 
   (define (just x)     `(just . ,x))
   (define nothing      'nothing)
@@ -111,113 +242,6 @@
           ((null? procs) x)
           ((nothing? x) nothing)
           (else (loop (maybe (car procs) x) (cdr procs)))))))
-
-  ;; @brief Make an RPC call to a Transmission daemon
-  ;; @param method A string naming an RPC method
-  ;; @param arguments The arguments of this method
-  ;; @param tag The tag for this call
-  ;; @returns A response object read with json-read, or #f in case of wrong
-  ;;          parameters
-  ;;
-  ;; Throws exceptions for HTTP errors, except for 409, which is handled
-  ;;   according to 2.3.1; see http-client for other HTTP errors.
-  ;;
-  ;; `rpc-call` returns #f if parameters are wrong. Some parameters are
-  ;; mandatory (with defaults provided): `*host*`, `*url*`, `*port*`.
-  ;; Others are optional: `*session-id*`, `*password*`, `*username*`.
-  ;; `*password*` and `*username*` are, however, optional "together"; they must
-  ;; both be #f or a string.
-  ;;
-  ;; See the json egg for how to encode arguments and decode responses.
-  (define (rpc-call method #!key (arguments #f) (tag #f))
-    (define (call host url port username password method arguments tag)
-
-      ;; @brief Create a request object
-      ;; @param host The hostname of the RPC server
-      ;; @param url See `rpc-url`
-      ;; @param port See `rpc-port`
-      ;; @param username See `rpc-username`
-      ;; @param password See `rpc-password`
-      ;; @returns A request object
-      ;;
-      ;; @a username and @a password are only required if
-      ;;   `rpc-authentication-required` is enabled
-      (define (make-req host url port username password)
-        (make-request #:method 'POST
-                      #:uri
-                      (make-uri #:scheme 'http
-                                #:host host
-                                #:port port
-                                #:path url
-                                #:username username
-                                #:password password)
-                      ; NOTE: Not sure, but x-transmission-session-id set to #f
-                      ;       seems to work
-                      #:headers (headers `((x-transmission-session-id ,(*session-id*))))))
-
-      ;; @brief Serialize a message, according to the spec
-      ;; @param method The `method` field
-      ;; @param arguments The `arguments` field
-      ;; @param tag The `tag` field
-      ;; @returns A string of the serialized JSON message
-      (define (make-message method arguments tag)
-        (define (message-req method arguments tag)
-          (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
-            (list->vector `((method . ,method) . ,optional))))
-
-        (with-output-to-string
-          (cut json-write (message-req method arguments tag))))
-
-      ;; @brief Handle 409, according to the spec
-      ;; @param con The condition object
-      ;; @param message The RPC message
-      ;; @returns The deserialized response of the RPC call
-      ;;
-      ;; If an error other than 409 occurs, the exception is propagated
-      (define (client-error-handler con message)
-        (let ((response (get-condition-property con 'client-error 'response)))
-
-          ; See 2.3.1 for how to handle 409
-          (cond
-
-            ; The condition object may not have a response property, in which
-            ;   case, it is not a 409
-            ((and response
-                  (= (response-code response) 409))
-             (let ((session-id (car (header-values 'x-transmission-session-id (response-headers response)))))
-               ;(print "GOT A 409!")
-               (*session-id* session-id)
-               (let ((req (make-req host url port username password)))
-                 (with-input-from-request req message json-read))))
-
-            ; Rethrow any other errors
-            (else
-              ;(print "NOT A 409!")
-              (signal con)))))
-
-      (let ((req (make-req host url port username password))
-            (message (make-message method arguments tag)))
-        (condition-case
-          (with-input-from-request req message json-read)
-          (con (exn http client-error) ; 409 is in this condition kind
-               (client-error-handler con message)))))
-
-    (let ((host (*host*))
-          (url (*url*))
-          (port (*port*))
-          (username (*username*))
-          (password (*password*))
-          (arguments (and arguments
-                          (positive? (vector-length arguments))
-                          arguments)))
-      (and host url port
-           (or (and username password)
-               (not (or username password)))
-           (call host url port username password method arguments tag))))
-
-  ;;;
-  ;;; General & common utilities
-  ;;;
 
   ;; @brief Make a function that returns #f or an argument pair
   ;; @param key The argument's key
@@ -298,6 +322,10 @@
   (define (make-string->arguments key) (make-*->arguments key pre-proc-string))
   (define (make-bool->arguments key) (make-*->arguments key pre-proc-bool))
   (define (make-array->arguments key) (make-*->arguments key pre-proc-array))
+
+  ;;;
+  ;;; Method Definitions
+  ;;;
 
   ;; @brief Create an RPC procedure
   ;; @param method The name of the RPC method
