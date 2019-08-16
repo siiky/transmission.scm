@@ -2,7 +2,7 @@
 ((author "siiky")
  (license "unlicense")
  (synopsis "Transmission RPC")
- (version "0.0.2")
+ (version "0.0.3")
  (dependencies
    http-client
    intarweb

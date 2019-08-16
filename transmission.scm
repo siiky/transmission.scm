@@ -18,6 +18,9 @@
    make-rpc-call
    define-rpc-call
    export-rpc-call
+
+   filename
+   metainfo
    )
 
   (import
@@ -132,6 +135,7 @@
   ;; @param arguments The `arguments` field
   ;; @param tag The `tag` field
   ;; @returns A string of the serialized JSON message
+  ;; @see Section 2.1
   (define (serialize-message method arguments tag)
     (define (message-req method arguments tag)
       (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
@@ -243,6 +247,23 @@
           ((nothing? x) nothing)
           (else (loop (maybe (car procs) x) (cdr procs)))))))
 
+  ;; For `torrent-add`
+  (define (filename string) `(filename . ,string))
+  (define (metainfo string) `(metainfo . ,string))
+
+  (define (torrent-source-with-tag? tag)
+    (lambda (ts)
+      (and ts
+           (pair? ts)
+           (eq? tag (car ts))
+           (string? (cdr ts)))))
+
+  (define (filename? ts) ((torrent-source-with-tag? 'filename) ts))
+  (define (metainfo? ts) ((torrent-source-with-tag? 'metainfo) ts))
+  (define (torrent-source? ts)
+    (or ((torrent-source-with-tag? 'filename) ts)
+        ((torrent-source-with-tag? 'metainfo) ts)))
+
   ;; @brief Make a function that returns #f or an argument pair
   ;; @param key The argument's key
   ;; @param pre-proc Function that pre-processes an input value
@@ -322,6 +343,9 @@
   (define (make-string->arguments key) (make-*->arguments key pre-proc-string))
   (define (make-bool->arguments key) (make-*->arguments key pre-proc-bool))
   (define (make-array->arguments key) (make-*->arguments key pre-proc-array))
+  (define (torrent-source->arguments ts)
+    (assert* 'torrent-source->arguments "a filename or metainfo" torrent-source?)
+    ts)
 
   ;;;
   ;;; Method Definitions
@@ -422,14 +446,15 @@
 
   (export-rpc-call (torrent-get (fields fields->arguments)) (ids #f ids->arguments))
 
-  ; As per the spec, either filename or metainfo must be given
-  ; (torrent-add #f           "<info>")
-  ; (torrent-add "<filename>" #f)
-  ; TODO: Improve this; make it a pre-call error to provide neither or both
+  ;; `source` must be a filename, metainfo (base64 encoded torrent),
+  ;;   as described in section 3.4. This parameter is constructed with
+  ;;   `filename` or `metainfo`, like so:
+  ;;     (torrent-add (filename "/path/to/file.torrent") ...)
+  ;;     (torrent-add (metainfo "<base64 torrent file>") ...)
+  ;; Magnets go in `filename`.
   (export-rpc-call
     (torrent-add
-      (filename (make-string->arguments 'filename))
-      (metainfo (make-string->arguments 'metainfo)))
+      (source torrent-source->arguments))
     (cookies            #f      (make-string->arguments 'cookies))
     (download-dir       #f      (make-string->arguments 'download-dir))
     (paused             nothing (make-bool->arguments   'paused))
