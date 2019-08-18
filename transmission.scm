@@ -120,15 +120,16 @@
   ;; @a username and @a password are only required if
   ;;   `rpc-authentication-required` is enabled
   (define (make-rpc-request host url port username password #!optional (session-id (*session-id*)))
-    (make-request #:method 'POST
-                  #:uri
-                  (make-uri #:scheme 'http
-                            #:host host
-                            #:port port
-                            #:path url
-                            #:username username
-                            #:password password)
-                  #:headers (headers `((x-transmission-session-id ,session-id)))))
+    (make-request
+      #:method 'POST
+      #:uri (make-uri
+              #:scheme 'http
+              #:host host
+              #:port port
+              #:path url
+              #:username username
+              #:password password)
+      #:headers (headers `((x-transmission-session-id ,session-id)))))
 
   ;; @brief Serialize a message, according to the spec
   ;; @param method The `method` field
@@ -137,12 +138,11 @@
   ;; @returns A string of the serialized JSON message
   ;; @see Section 2.1
   (define (serialize-message method arguments tag)
-    (define (message-req method arguments tag)
+    (define (mkmsg method arguments tag)
       (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
         (list->vector `((method . ,method) . ,optional))))
-
     (with-output-to-string
-      (cut json-write (message-req method arguments tag))))
+      (cut json-write (mkmsg method arguments tag))))
 
   ;; @brief Update a request's `x-transmission-session-id` header
   ;; @param request The request
@@ -266,83 +266,83 @@
 
   ;; @brief Make a function that returns #f or an argument pair
   ;; @param key The argument's key
-  ;; @param pre-proc Function that pre-processes an input value
+  ;; @param proc Function that processes an input value
   ;; @returns A function that, from an input value, returns #f or an argument pair
   ;;
-  ;; @a pre-proc must return a Maybe. If the result of pre-proc is Nothing, the
-  ;;   result is #f, and if the result is Just, then it returns an argument pair.
-  (define (make-*->arguments key pre-proc)
+  ;; @a proc must return a Maybe. If the result of proc is Nothing, it returns
+  ;;   #f, and if the result is Just, it returns an argument pair.
+  (define (make-*->arguments key proc)
     (lambda (x)
-      (let ((x (pre-proc x)))
+      (let ((x (proc x)))
         (and (just? x) `(,key . ,(unwrap x))))))
 
   (define (id? id)
-    (or (string? id) (fixnum? id)))
+    (or (fixnum? id)
+        (and (string? id)
+             (or (= (string-length id) 40) ; SHA1
+                 (string=? id "recently-active")))))
 
   ;; @brief Pre-process an ID
   ;; @param id An ID
   ;; @returns A Maybe
-  (define (pre-proc-id id)
-    (->maybe
-      (and id
-           (or (string? id) (fixnum? id))
-           id)))
+  (define (proc-id id)
+    (->maybe (and id (id? id) id)))
 
   ;; @brief Pre-process a list of IDs
   ;; @param ids A list of IDs
   ;; @returns A Maybe
-  (define (pre-proc-ids ids)
+  ;;
+  ;; @a ids can be:
+  ;;   * '() meaning no torrent (the default);
+  ;;   * #f meaning all torrents;
+  ;;   * "recently-active" meaning the recently active torrents;
+  ;;   * a single ID (fixnum);
+  ;;   * a single hash (string);
+  ;;   * a list of torrent IDs and hashes
+  (define (proc-ids ids)
     ((maybe-do
        ; Handle string ("recently-active") and list or vector of strings (hash)
        ;   and integers (id)
        (lambda (ids)
-         (->maybe
-           (cond
-             ((id? ids) ids)
-             ((and (vector? ids)
-                   (positive? (vector-length ids)))
-              (vector->list ids))
-             ((list? ids) ids)
-             (else #f))))
-
+         (cond ((id? ids) (just (if (string? ids) ids `(,ids))))
+               ((list? ids) (just ids))
+               (else nothing)))
        (lambda (ids)
-         (just (if (id? ids)
-                   ids
-                   (map unwrap (filter just? (map pre-proc-id ids)))))))
+         (if (id? ids) (just ids)
+             (let ((ids (map proc-id ids)))
+               (if (every just? ids) (just (map unwrap ids)) nothing)))))
+     (->maybe ids)))
 
-     ids))
+  (define (proc-array array)
+    ; The json egg serializes scheme lists as JSON arrays
+    (cond
+      ((vector? array) (just (vector->list array)))
+      ((list? array) (just array))
+      (else nothing)))
 
-  (define (pre-proc-array array)
-    (->maybe
-      (cond
-        ; The json egg serializes scheme lists as JSON arrays
-        ((vector? array) (vector->list array))
-        ((list? array) array)
-        (else #f))))
-
-  (define (pre-proc-list-of-strings strs)
+  (define (proc-list-of-strings strs)
     (->maybe
       ((assert*
-         'pre-proc-list-of-strings
+         'proc-list-of-strings
          "a list of strings or #f"
          (or? false? (cut every string? <>)))
        strs)))
 
-  (define pre-proc-fields pre-proc-list-of-strings)
+  (define proc-fields proc-list-of-strings)
 
   ;; TODO: Strict version
-  (define pre-proc-object ->maybe)
+  (define proc-object ->maybe)
 
-  (define (pre-proc-bool b) (just (and (just? b) (unwrap b))))
-  (define (pre-proc-string str) (->maybe (and str (string? str) str)))
-  (define (pre-proc-number n) (->maybe (and n (number? n) n)))
+  (define (proc-bool b) (just (and (just? b) (unwrap b))))
+  (define (proc-string str) (->maybe (and str (string? str) str)))
+  (define (proc-number n) (->maybe (and n (number? n) n)))
 
-  (define ids->arguments (make-*->arguments 'ids pre-proc-ids))
-  (define fields->arguments (make-*->arguments 'fields pre-proc-fields))
-  (define (make-number->arguments key) (make-*->arguments key pre-proc-number))
-  (define (make-string->arguments key) (make-*->arguments key pre-proc-string))
-  (define (make-bool->arguments key) (make-*->arguments key pre-proc-bool))
-  (define (make-array->arguments key) (make-*->arguments key pre-proc-array))
+  (define ids->arguments (make-*->arguments 'ids proc-ids))
+  (define fields->arguments (make-*->arguments 'fields proc-fields))
+  (define (make-number->arguments key) (make-*->arguments key proc-number))
+  (define (make-string->arguments key) (make-*->arguments key proc-string))
+  (define (make-bool->arguments key) (make-*->arguments key proc-bool))
+  (define (make-array->arguments key) (make-*->arguments key proc-array))
   (define (torrent-source->arguments ts)
     (assert* 'torrent-source->arguments "a filename or metainfo" torrent-source?)
     ts)
@@ -375,7 +375,7 @@
   ;;   (make-rpc-call some-method)
   ;;
   ;; A call with one required argument `fields` and one key argument `ids`
-  ;;   (make-rpc-call (some-method (fields fields->arguments)) (ids #f ids->arguments))
+  ;;   (make-rpc-call (some-method (fields fields->arguments)) (ids '() ids->arguments))
   (define-syntax make-rpc-call
     (syntax-rules ()
       ((make-rpc-call (method (required required-handler) ...) (key default key-handler) ...)
@@ -410,7 +410,7 @@
   (define-syntax export-3.1/4.6
     (syntax-rules ()
       ((export-3.1/4.6 method)
-       (export-rpc-call method (ids #f ids->arguments)))))
+       (export-rpc-call method (ids '() ids->arguments)))))
 
   (export-3.1/4.6 torrent-start)
   (export-3.1/4.6 torrent-start-now)
@@ -426,7 +426,7 @@
     (files-wanted          #f      (make-array->arguments  'files-wanted))
     (files-unwanted        #f      (make-array->arguments  'files-unwanted))
     (honors-session-limits nothing (make-bool->arguments   'honorsSessionLimits))
-    (ids                   #f      (make-array->arguments  'ids))
+    (ids                   '()     ids->arguments)
     (labels                #f      (make-array->arguments  'labels))
     (location              #f      (make-string->arguments 'location))
     (peer-limit            #f      (make-number->arguments 'peer-limit))
@@ -444,11 +444,10 @@
     (upload-limit          #f      (make-number->arguments 'uploadLimit))
     (upload-limited        nothing (make-bool->arguments   'uploadLimited)))
 
-  (export-rpc-call (torrent-get (fields fields->arguments)) (ids #f ids->arguments))
+  (export-rpc-call (torrent-get (fields fields->arguments)) (ids '() ids->arguments))
 
-  ;; `source` must be a filename, metainfo (base64 encoded torrent),
-  ;;   as described in section 3.4. This parameter is constructed with
-  ;;   `filename` or `metainfo`, like so:
+  ;; `source` must be a filename or metainfo, as described in section 3.4,
+  ;;   and is constructed like so:
   ;;     (torrent-add (filename "/path/to/file.torrent") ...)
   ;;     (torrent-add (metainfo "<base64 torrent file>") ...)
   ;; Magnets go in `filename`.
@@ -525,7 +524,7 @@
     (speed-limit-up-enabled       nothing (make-bool->arguments   'speed-limit-up-enabled))
     (start-added-torrents         nothing (make-bool->arguments   'start-added-torrents))
     (trash-original-torrent-files nothing (make-bool->arguments   'trash-original-torrent-files))
-    (units                        #f      (make-*->arguments      'units pre-proc-object))
+    (units                        #f      (make-*->arguments      'units proc-object))
     (utp-enabled                  nothing (make-bool->arguments   'utp-enabled)))
 
   (export-rpc-call session-get (fields #f fields->arguments))
@@ -540,5 +539,4 @@
   (export-3.1/4.6 queue-move-down)
   (export-3.1/4.6 queue-move-bottom)
 
-  (export-rpc-call (free-space (path (make-string->arguments 'path))))
-  )
+  (export-rpc-call (free-space (path (make-string->arguments 'path)))))
