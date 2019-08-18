@@ -231,38 +231,32 @@
   (define (nothing? x) (eq? x nothing))
   (define (maybe? x)   (or (nothing? x) (just? x)))
   (define (unwrap x)   (cdr x))
-  (define (->maybe b)  (if b (just b) nothing))
+
+  (define (->maybe b)
+    (cond ((or (false? b) (nothing? b)) nothing)
+          ((just? b) b)
+          (else (just b))))
 
   (define (maybe f x)
-    (cond
-      ((just? x) (just (f (unwrap x))))
-      ((nothing? x) nothing)
-      (else (f x))))
+    ((assert* 'maybe "a maybe" maybe?) x)
+    (if (just? x) (f (unwrap x)) nothing))
 
   (define (maybe-do . procs)
     (lambda (x)
       (let loop ((x x) (procs procs))
-        (cond
-          ((null? procs) x)
-          ((nothing? x) nothing)
-          (else (loop (maybe (car procs) x) (cdr procs)))))))
+        (if (or (null? procs) (nothing? x))
+            x
+            (loop (maybe (car procs) x) (cdr procs))))))
 
   ;; For `torrent-add`
-  (define (filename string) `(filename . ,string))
-  (define (metainfo string) `(metainfo . ,string))
-
-  (define (torrent-source-with-tag? tag)
-    (lambda (ts)
-      (and ts
-           (pair? ts)
-           (eq? tag (car ts))
-           (string? (cdr ts)))))
-
+  (define (filename str) `(filename . ,str))
+  (define (metainfo str) `(metainfo . ,str))
   (define (filename? ts) ((torrent-source-with-tag? 'filename) ts))
   (define (metainfo? ts) ((torrent-source-with-tag? 'metainfo) ts))
+  (define (torrent-source-with-tag? tag)
+    (lambda (ts) (and ts (pair? ts) (eq? tag (car ts)) (string? (cdr ts)))))
   (define (torrent-source? ts)
-    (or ((torrent-source-with-tag? 'filename) ts)
-        ((torrent-source-with-tag? 'metainfo) ts)))
+    (or ((torrent-source-with-tag? 'filename) ts) ((torrent-source-with-tag? 'metainfo) ts)))
 
   ;; @brief Make a function that returns #f or an argument pair
   ;; @param key The argument's key
@@ -301,12 +295,11 @@
   ;;   * a list of torrent IDs and hashes
   (define (proc-ids ids)
     ((maybe-do
-       ; Handle string ("recently-active") and list or vector of strings (hash)
-       ;   and integers (id)
+       ; Handle "recently-active" and list of strings (hash) and integers (ID)
        (lambda (ids)
-         (cond ((id? ids) (just (if (string? ids) ids `(,ids))))
-               ((list? ids) (just ids))
-               (else nothing)))
+         (just (cond ((id? ids) (if (string? ids) ids `(,ids)))
+                     ((list? ids) ids)
+                     (else '()))))
        (lambda (ids)
          (if (id? ids) (just ids)
              (let ((ids (map proc-id ids)))
