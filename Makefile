@@ -7,6 +7,9 @@ SRC := $(EGG_SRC) $(EXAMPLE_SRC)
 default: $(EGG_SRC)
 	chicken-install -n
 
+install: $(EGG_SRC)
+	chicken-install
+
 clean:
 	chicken-clean
 

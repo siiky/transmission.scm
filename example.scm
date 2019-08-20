@@ -1,11 +1,17 @@
-;;; This example shows how to make the RPC call below
-;;;
+;;; torrent-get-example makes the RPC call
 ;;; ```json
 ;;; {
 ;;;     "method": "torrent-get",
 ;;;     "arguments": {
 ;;;         "fields": [ "id", "totalSize" ]
 ;;;     }
+;;; }
+;;; ```
+;;;
+;;; session-get-example makes the RPC call
+;;; ```json
+;;; {
+;;;     "method": "session-get"
 ;;; }
 ;;; ```
 

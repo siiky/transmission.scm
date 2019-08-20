@@ -1,13 +1,31 @@
 # transmission.scm
 
-[Transmission][transmission] (v3) [RPC][rpc-wiki] (v16) in Scheme
+[Transmission][transmission] (v3) [RPC][rpc-wiki] (v16) in Scheme (CHICKEN 5).
 
-## Example
+## Trying it out!
+
+Install dependencies and compile:
 
 ```sh
-chicken-install -n
-csi -s example.scm your-rpc-username your-rpc-password
+make
+# start a transmission-daemon for playing with
+# see the Makefile for more details
+# ^C or `(session-close)` in csi to stop
+make start-transmission
 ```
+
+In another terminal, run the example or `csi`:
+
+```sh
+chicken-install optimism
+
+make example # run the example script
+# or
+make csi # start csi ready to play with the daemon started above
+```
+
+See `transmission.log` for `transmission-daemon`'s logs (and `LOG_FILE` in the
+`Makefile`).
 
 ## API
 
@@ -33,8 +51,8 @@ The hostname of the Transmission RPC server. Defaults to `localhost`.
 
 The `X-Transmission-Session-Id` header. See section **2.3.1** of the [spec][rpc-spec].
 
-This parameter is optional. If not set, Transmission will reply with a `409`, and the correct
-`X-Transmission-Session-Id` will be set.
+This parameter is optional. If not set, Transmission will reply with a `409`,
+and the correct `X-Transmission-Session-Id` will be set.
 
 ### RPC Methods
 
