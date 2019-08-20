@@ -53,15 +53,18 @@ CSI_ARGS := \
 $(DOWNLOAD_DIR):
 	mkdir $(DOWNLOAD_DIR)
 
-csi: $(EXAMPLE_SRC)
-	[ -f start-transmission ] && csi -q -s example.scm --repl $(CSI_ARGS)
+daemon_running:
+	[ -f start-transmission ] # transmission is not running; run `make start-transmission`
 
-example: $(EXAMPLE_SRC)
-	[ -f start-transmission ] && csi -q -s example.scm $(CSI_ARGS)
+csi: $(EXAMPLE_SRC) daemon_running
+	csi -q -s example.scm --repl $(CSI_ARGS)
+
+example: $(EXAMPLE_SRC) daemon_running
+	csi -q -s example.scm $(CSI_ARGS)
 
 start-transmission: $(DOWNLOAD_DIR)
 	touch start-transmission
 	transmission-daemon $(TRANSMISSION_ARGS) 2>&1 | tee $(LOG_FILE)
 	rm start-transmission
 
-.PHONY: clean csi default example lint
+.PHONY: clean csi daemon_running default example lint

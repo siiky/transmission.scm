@@ -25,8 +25,6 @@
         (set! n (+ n 1))
         ret))))
 
-(define (nop . x) #f)
-
 (define (torrent-get-example)
   (display "torrent-get-example: ")
   (print-result (torrent-get '("id" "totalSize") #:tag (unique-tag))))
