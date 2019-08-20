@@ -70,6 +70,7 @@
       x))
 
   (define false? not)
+  (define (->bool x) (not (not x)))
 
   (define (or? . rest)
     (lambda (x)
@@ -326,7 +327,7 @@
   ;; TODO: Strict version
   (define proc-object ->maybe)
 
-  (define (proc-bool b) (just (and (just? b) (unwrap b))))
+  (define (proc-bool b) (if (nothing? b) nothing (just (->bool b))))
   (define (proc-string str) (->maybe (and str (string? str) str)))
   (define (proc-number n) (->maybe (and n (number? n) n)))
 
