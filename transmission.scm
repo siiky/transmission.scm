@@ -26,6 +26,7 @@
   (import
     scheme
     (only chicken.base
+          and-let*
           assert
           cut
           fixnum?
@@ -90,8 +91,7 @@
   (define *url* (make-parameter '(/ "transmission" "rpc")))
 
   ;; rpc-port
-  (define *port*
-    (make-parameter 9091 (assert* '*port* "an integer" fixnum?)))
+  (define *port* (make-parameter 9091 (assert* '*port* "an integer" fixnum?)))
 
   ;; rpc-username
   (define *username*
@@ -142,8 +142,7 @@
     (define (mkmsg method arguments tag)
       (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
         (list->vector `((method . ,method) . ,optional))))
-    (with-output-to-string
-      (cut json-write (mkmsg method arguments tag))))
+    (with-output-to-string (cut json-write (mkmsg method arguments tag))))
 
   ;; @brief Update a request's `x-transmission-session-id` header
   ;; @param request The request
@@ -194,10 +193,10 @@
   ;;   according to 2.3.1; see http-client for other HTTP errors.
   ;;
   ;; `rpc-call` returns #f if parameters are wrong. Some parameters are
-  ;; mandatory (with defaults provided): `*host*`, `*url*`, `*port*`.
-  ;; Others are optional: `*session-id*`, `*password*`, `*username*`.
-  ;; `*password*` and `*username*` are, however, optional "together"; they must
-  ;; both be #f or a string.
+  ;;   mandatory (with defaults provided): `*host*`, `*url*`, `*port*`.
+  ;;   Others are optional: `*session-id*`, `*password*`, `*username*`.
+  ;;   `*password*` and `*username*` are, however, optional "together";
+  ;;   they must both be #f or a string.
   ;;
   ;; See the json egg for how to encode arguments and decode responses.
   (define (rpc-call method #!key (arguments #f) (tag #f))
@@ -209,18 +208,16 @@
           (condition (exn http client-error) ; 409 is in this condition kind
                      (handle-409 condition req message)))))
 
-    (let ((host (*host*))
-          (url (*url*))
-          (port (*port*))
-          (username (*username*))
-          (password (*password*))
-          (arguments (and arguments
-                          (positive? (vector-length arguments))
-                          arguments)))
-      (and host url port
-           (or (and username password)
-               (not (or username password)))
-           (call host url port username password method arguments tag))))
+    (define (!xor a b) (or (and a b) (not (or a b))))
+    (and-let*
+      ((host (*host*))
+       (url (*url*))
+       (port (*port*)))
+      (let ((username (*username*))
+            (password (*password*))
+            (arguments (and arguments (positive? (vector-length arguments)) arguments)))
+        (and (!xor username password)
+             (call host url port username password method arguments tag)))))
 
   ;;;
   ;;; General & Common Utilities
@@ -354,8 +351,7 @@
   ;; @param key-handler A handler for a key parameter
   ;; @returns An RPC procedure
   ;;
-  ;; This macro defines and exports an RPC procedure described by the given
-  ;;   parameters.
+  ;; This macro creates an RPC procedure described by the given parameters.
   ;;
   ;; On top of the given key parameters, every RPC procedure has the `tag` key
   ;;   parameter, as per the RPC spec.
