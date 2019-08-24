@@ -63,22 +63,20 @@
     (only uri-common
           make-uri))
 
-  (define (assert* loc type type?)
-    (lambda (x)
-      (assert
-        (type? x) loc
-        (string-append "Expected " type ", but got " (->string x)))
-      x))
+  (define ((assert* loc type type?) x)
+    (assert
+      (type? x) loc
+      (string-append "Expected " type ", but got " (->string x)))
+    x)
 
   (define false? not)
   (define (->bool x) (not (not x)))
 
-  (define (or? . rest)
-    (lambda (x)
-      (let loop ((l rest))
-        (or (null? l)
-            ((car l) x)
-            (loop (cdr l))))))
+  (define ((or? . rest) x)
+    (let loop ((l rest))
+      (or (null? l)
+          ((car l) x)
+          (loop (cdr l)))))
 
   ;;;
   ;;; RPC Parameters
@@ -239,20 +237,19 @@
     ((assert* 'maybe "a maybe" maybe?) x)
     (if (just? x) (f (unwrap x)) nothing))
 
-  (define (maybe-do . procs)
-    (lambda (x)
-      (let loop ((x x) (procs procs))
-        (if (or (null? procs) (nothing? x))
-            x
-            (loop (maybe (car procs) x) (cdr procs))))))
+  (define ((maybe-do . procs) x)
+    (let loop ((x x) (procs procs))
+      (if (or (null? procs) (nothing? x))
+          x
+          (loop (maybe (car procs) x) (cdr procs)))))
 
   ;; For `torrent-add`
   (define (filename str) `(filename . ,str))
   (define (metainfo str) `(metainfo . ,str))
   (define (filename? ts) ((torrent-source-with-tag? 'filename) ts))
   (define (metainfo? ts) ((torrent-source-with-tag? 'metainfo) ts))
-  (define (torrent-source-with-tag? tag)
-    (lambda (ts) (and ts (pair? ts) (eq? tag (car ts)) (string? (cdr ts)))))
+  (define ((torrent-source-with-tag? tag) ts)
+    (and ts (pair? ts) (eq? tag (car ts)) (string? (cdr ts))))
   (define (torrent-source? ts)
     (or ((torrent-source-with-tag? 'filename) ts) ((torrent-source-with-tag? 'metainfo) ts)))
 
@@ -263,10 +260,9 @@
   ;;
   ;; @a proc must return a Maybe. If the result of proc is Nothing, it returns
   ;;   #f, and if the result is Just, it returns an argument pair.
-  (define (make-*->argument key proc)
-    (lambda (x)
-      (let ((x (proc x)))
-        (and (just? x) `(,key . ,(unwrap x))))))
+  (define ((make-*->argument key proc) x)
+    (let ((x (proc x)))
+      (and (just? x) `(,key . ,(unwrap x)))))
 
   (define (id? id)
     (or (fixnum? id)
@@ -335,8 +331,7 @@
   (define (make-bool->argument key) (make-*->argument key proc-bool))
   (define (make-array->argument key) (make-*->argument key proc-array))
   (define (torrent-source->argument ts)
-    (assert* 'torrent-source->argument "a filename or metainfo" torrent-source?)
-    ts)
+    ((assert* 'torrent-source->argument "a filename or metainfo" torrent-source?) ts))
 
   ;;;
   ;;; Method Definitions
