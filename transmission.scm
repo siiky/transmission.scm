@@ -28,7 +28,7 @@
     (only chicken.base
           and-let*
           assert
-          cut
+          cute
           fixnum?
           identity
           make-parameter
@@ -140,7 +140,7 @@
     (define (mkmsg method arguments tag)
       (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
         (list->vector `((method . ,method) . ,optional))))
-    (with-output-to-string (cut json-write (mkmsg method arguments tag))))
+    (with-output-to-string (cute json-write (mkmsg method arguments tag))))
 
   ;; @brief Update a request's `x-transmission-session-id` header
   ;; @param request The request
@@ -312,7 +312,7 @@
       ((assert*
          'proc-list-of-strings
          "a list of strings or #f"
-         (or? false? (cut every string? <>)))
+         (or? false? (cute every string? <>)))
        strs)))
 
   (define proc-fields proc-list-of-strings)

@@ -2,16 +2,22 @@
 ((author "siiky")
  (license "unlicense")
  (synopsis "Transmission RPC")
- (version "0.0.5")
+ (version "0.0.6")
  (dependencies
    http-client
    intarweb
    json
    srfi-1
    uri-common)
- (component-options (csc-options "-O0" "-d3"))
+ (component-options
+   ;(csc-options "-O0" "-d3")
+   (linkage static))
  (components
    (extension transmission
               (types-file)
               (modules transmission)
-              (source transmission.scm))))
+              (source transmission.scm))
+   (extension transmission.utils
+              (types-file)
+              (modules transmission.utils)
+              (source transmission.utils.scm))))
