@@ -54,6 +54,7 @@
           response-code
           response-headers
           update-request)
+    ; TODO: Replace json with medea, which has sane Scheme-y defaults
     (only json
           json-read
           json-write)
@@ -320,6 +321,11 @@
   ;; TODO: Strict version
   (define proc-object ->maybe)
 
+  (define (format->argument val)
+    (case val
+      ((#f "objects" "table") (just val))
+      (else nothing)))
+
   (define (proc-bool b) (if (nothing? b) nothing (just (->bool b))))
   (define (proc-string str) (->maybe (and str (string? str) str)))
   (define (proc-number n) (->maybe (and n (number? n) n)))
@@ -429,7 +435,7 @@
     (upload-limit          #f      (make-number->argument 'uploadLimit))
     (upload-limited        nothing (make-bool->argument   'uploadLimited)))
 
-  (export-rpc-call (torrent-get (fields fields->argument)) (ids '() ids->argument))
+  (export-rpc-call (torrent-get (fields fields->argument)) (ids '() ids->argument) (format #f (make-*->argument 'format format->argument)))
 
   ;; `source` must be a filename or metainfo, as described in section 3.4,
   ;;   and is constructed like so:

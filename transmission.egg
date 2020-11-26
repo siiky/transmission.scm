@@ -11,7 +11,8 @@
    uri-common)
  (component-options
    ;(csc-options "-O0" "-d3")
-   (linkage static))
+   ;(linkage static)
+   )
  (components
    (extension transmission
               (types-file)

@@ -1,6 +1,29 @@
 # transmission.scm
 
-[Transmission][transmission] (v3) [RPC][rpc-wiki] (v16) in Scheme (CHICKEN 5).
+[Transmission][transmission] (v3.01) [RPC][rpc-wiki] (v17,
+[rpc-spec.txt][rpc-spec-latest-supported]) in Scheme (CHICKEN 5).
+
+The versions above are the versions that are (supposedly) guaranteed to work.
+They don't mean a later RPC Spec isn't supported. Some changes made to the spec
+require no change in the API, because they're usually on the server (daemon)
+side. An example of this is:
+
+```
+17    | 3.01    | yes       | torrent-get          | new arg "file-count"
+17    | 3.01    | yes       | torrent-get          | new arg "primary-mime-type"
+```
+
+Neither requires an API change because the library doesn't check if the fields
+are valid (this is intentional).
+
+Changes like these, however:
+
+```
+16    | 3.00    | yes       | session-get          | new request arg "fields"
+16    | 3.00    | yes       | torrent-get          | new request arg "format"
+```
+
+Require API changes.
 
 ## Trying it out!
 
@@ -98,6 +121,7 @@ have any suggestions, open an issue or make a pull request.
  * [RPC Related Settings][rpc-config]
 
 [rpc-config]: https://github.com/transmission/transmission/wiki/Editing-Configuration-Files#rpc
+[rpc-spec-latest-supported]: https://github.com/transmission/transmission/blob/f59118d1fe6a320d797b151a6f235f739ef3b487/extras/rpc-spec.txt
 [rpc-spec]: https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt
 [rpc-wiki]: https://github.com/transmission/transmission/wiki/RPC-Protocol-Specification
 [transmission]: https://github.com/transmission/transmission

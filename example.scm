@@ -23,6 +23,7 @@
 (import srfi-1)
 
 (import transmission)
+(import transmission.utils)
 
 (define unique-tag
   (let ((n 0))
@@ -49,34 +50,43 @@
             (pp result))))))
 
 (define *OPTS*
-  `(((--port) . ,string->number)
+  `(((--host) . host)
+    ((--port) . ,string->number)
     ((--username) . username)
     ((--password) . password)
     ((--session-id) . session-id)
     ((--repl))))
 
-(define (assoc-val key alist)
-  (let ((key/val (assoc key alist)))
-    (if key/val (cdr key/val) #f)))
-
 (define (init args)
   (let ((pargs (parse-command-line args *OPTS*)))
-    (let ((username (assoc-val '--username pargs))
-          (password (assoc-val '--password pargs))
-          (port (assoc-val '--port pargs))
-          (session-id (assoc-val '--session-id pargs))
-          (repl? (assoc '--repl pargs)))
+    (let ((host (alist-ref '--host pargs))
+          (port (alist-ref '--port pargs))
+          (username (alist-ref '--username pargs))
+          (password (alist-ref '--password pargs))
+          (session-id (alist-ref '--session-id pargs))
+          (repl? (not (not (assoc '--repl pargs)))))
+      (when host (*host* host))
+      (when port (*port* port))
       (when username (*username* username))
       (when password (*password* password))
-      (when port (*port* port))
       (when session-id (*session-id* session-id))
       repl?)))
+
+(define (savector-ref key avector)
+  (avector-ref key avector string=?))
 
 (define (main args)
   (if (init args)
       (repl)
-      (begin
-        (torrent-get-example)
-        (session-get-example))))
+      (let ((reply (torrent-get '("id" "downloadDir" "status" "uploadRatio") #:ids #f)))
+        (assert (reply-success? reply))
+        (pp
+          (filter
+            (lambda (obj)
+              (and (member (savector-ref "status" obj) `(,status-seed ,status-seed-wait) =)
+                   (> (savector-ref "uploadRatio" obj) 2)
+                   (string=? (savector-ref "downloadDir" obj) "/some/path/to/files/")))
+            (reply-ref-path (reply-arguments reply) '("torrents"))))
+        )))
 
 (main (command-line-arguments))
