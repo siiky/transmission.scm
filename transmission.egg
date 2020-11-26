@@ -2,11 +2,11 @@
 ((author "siiky")
  (license "unlicense")
  (synopsis "Transmission RPC")
- (version "0.0.6")
+ (version "0.0.8")
  (dependencies
    http-client
    intarweb
-   json
+   medea
    srfi-1
    uri-common)
  (component-options

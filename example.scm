@@ -25,13 +25,6 @@
 (import transmission)
 (import transmission.utils)
 
-(define unique-tag
-  (let ((n 0))
-    (lambda ()
-      (let ((ret n))
-        (set! n (+ n 1))
-        ret))))
-
 (define (torrent-get-example)
   (display "torrent-get-example: ")
   (print-result (torrent-get '("id" "totalSize") #:tag (unique-tag))))
@@ -72,21 +65,19 @@
       (when session-id (*session-id* session-id))
       repl?)))
 
-(define (savector-ref key avector)
-  (avector-ref key avector string=?))
-
 (define (main args)
   (if (init args)
       (repl)
-      (let ((reply (torrent-get '("id" "downloadDir" "status" "uploadRatio") #:ids #f)))
+      (let ((reply (torrent-get '("id" "downloadDir" "status" "uploadRatio") #:ids #f #:tag (unique-tag))))
         (assert (reply-success? reply))
-        (pp
-          (filter
-            (lambda (obj)
-              (and (member (savector-ref "status" obj) `(,status-seed ,status-seed-wait) =)
-                   (> (savector-ref "uploadRatio" obj) 2)
-                   (string=? (savector-ref "downloadDir" obj) "/some/path/to/files/")))
-            (reply-ref-path (reply-arguments reply) '("torrents"))))
-        )))
+        (pp (filter
+              (lambda (obj)
+                (let ((status (reply-ref 'status obj))
+                      (upload-ratio (reply-ref 'uploadRatio obj))
+                      (download-dir (reply-ref 'downloadDir obj)))
+                  (and (member status `(,status-seed ,status-seed-wait) =)
+                       (> upload-ratio 2)
+                       (string=? download-dir "/some/path/to/files/"))))
+              (vector->list (reply-ref-path (reply-arguments reply) '(torrents))))))))
 
 (main (command-line-arguments))
