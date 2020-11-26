@@ -1,10 +1,8 @@
 (module
   transmission.utils
   (
-   avector-ref
-   avector?
-
    reply-arguments
+   reply-ref
    reply-ref-path
    reply-result
    reply-success?
@@ -16,26 +14,32 @@
    status-seed
    status-seed-wait
    status-stopped
+
+   unique-tag
    )
 
   (import
     scheme
+    scheme.base
     (only chicken.base
           add1
           alist-ref
           cute))
 
-  (define (avector? obj)
-    (vector? obj))
+  (define unique-tag
+    (let ((n 0))
+      (lambda ()
+        (let ((ret n))
+          (set! n (+ n 1))
+          ret))))
 
-  (define (avector-ref key avector #!optional (==? equal?))
-    (alist-ref key (vector->list avector) ==?))
+  (define reply-ref alist-ref)
 
   (define (reply-result reply)
-    (avector-ref "result" reply))
+    (reply-ref 'result reply))
 
   (define (reply-arguments reply)
-    (avector-ref "arguments" reply))
+    (reply-ref 'arguments reply))
 
   (define (reply-result-success? result)
     (and (string? result) (string=? result "success")))
@@ -48,14 +52,14 @@
       ((null? path)
        reply)
 
-      ((avector? reply) ; table?
+      ((list? reply) ; table?
        (let ((phead (car path))
              (ptail (cdr path)))
-         (let ((branch (avector-ref phead reply ==?)))
+         (let ((branch (reply-ref phead reply ==?)))
            (reply-ref-path branch ptail ==?))))
 
-      ((list? reply) ; array?
-       (map (cute reply-ref-path <> path ==?) reply))
+      ((vector? reply) ; array?
+       (vector-map (cute reply-ref-path <> path ==?) reply))
 
       (else #f)))
 

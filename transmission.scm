@@ -32,15 +32,13 @@
           fixnum?
           identity
           make-parameter
-          print)
+          o)
     (only chicken.condition
           condition-case
           get-condition-property
           signal)
     (only chicken.module
           export)
-    (only chicken.port
-          with-output-to-string)
     (only chicken.string
           ->string))
 
@@ -54,11 +52,15 @@
           response-code
           response-headers
           update-request)
-    ; TODO: Replace json with medea, which has sane Scheme-y defaults
-    (only json
-          json-read
-          json-write)
+    ; NOTE: I'm not too comfortable with medea deserializing objects into
+    ;       alists with symbols as keys, but I assume no one will use this to
+    ;       communicate with a transmission instance they don't own, and thus
+    ;       possibly malicious...
+    (only medea
+          json->string
+          read-json)
     (only srfi-1
+          any
           every
           filter)
     (only uri-common
@@ -74,10 +76,7 @@
   (define (->bool x) (not (not x)))
 
   (define ((or? . rest) x)
-    (let loop ((l rest))
-      (or (null? l)
-          ((car l) x)
-          (loop (cdr l)))))
+    (any (cute <> x) rest))
 
   ;;;
   ;;; RPC Parameters
@@ -140,8 +139,9 @@
   (define (serialize-message method arguments tag)
     (define (mkmsg method arguments tag)
       (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
-        (list->vector `((method . ,method) . ,optional))))
-    (with-output-to-string (cute json-write (mkmsg method arguments tag))))
+        `((method . ,method) . ,optional)))
+
+    (json->string (mkmsg method arguments tag)))
 
   ;; @brief Update a request's `x-transmission-session-id` header
   ;; @param request The request
@@ -171,21 +171,19 @@
         ((and response
               (= (response-code response) 409))
          (let ((session-id (car (header-values 'x-transmission-session-id (response-headers response)))))
-           ;(print "GOT A 409!")
            (*session-id* session-id)
            (let ((req (update-request-session-id request session-id)))
-             (with-input-from-request req message json-read))))
+             (with-input-from-request req message read-json))))
 
         ; Rethrow any other errors
         (else
-          ;(print "NOT A 409!")
           (signal condition)))))
 
   ;; @brief Make an RPC call to a Transmission daemon
   ;; @param method A string naming an RPC method
   ;; @param arguments The arguments of this method
   ;; @param tag The tag for this call
-  ;; @returns A response object read with json-read, or #f in case of wrong
+  ;; @returns A response object read with read-json, or #f in case of wrong
   ;;          parameters
   ;;
   ;; Throws exceptions for HTTP errors, except for 409, which is handled
@@ -197,13 +195,13 @@
   ;;   `*password*` and `*username*` are, however, optional "together";
   ;;   they must both be #f or a string.
   ;;
-  ;; See the json egg for how to encode arguments and decode responses.
+  ;; See the medea egg for how to encode arguments and decode responses.
   (define (rpc-call method #!key (arguments #f) (tag #f))
     (define (call host url port username password method arguments tag)
       (let ((req (make-rpc-request host url port username password))
             (message (serialize-message method arguments tag)))
         (condition-case
-          (with-input-from-request req message json-read)
+          (with-input-from-request req message read-json)
           (condition (exn http client-error) ; 409 is in this condition kind
                      (handle-409 condition req message)))))
 
@@ -214,7 +212,7 @@
        (port (*port*)))
       (let ((username (*username*))
             (password (*password*))
-            (arguments (and arguments (positive? (vector-length arguments)) arguments)))
+            (arguments (and arguments (not (null? arguments)) arguments)))
         (and (!xor username password)
              (call host url port username password method arguments tag)))))
 
@@ -238,6 +236,9 @@
     ((assert* 'maybe "a maybe" maybe?) x)
     (if (just? x) (f (unwrap x)) nothing))
 
+  (define (maybe-map f x)
+    (maybe (o just f) x))
+
   (define ((maybe-do . procs) x)
     (let loop ((x x) (procs procs))
       (if (or (null? procs) (nothing? x))
@@ -247,12 +248,11 @@
   ;; For `torrent-add`
   (define (filename str) `(filename . ,str))
   (define (metainfo str) `(metainfo . ,str))
-  (define (filename? ts) ((torrent-source-with-tag? 'filename) ts))
-  (define (metainfo? ts) ((torrent-source-with-tag? 'metainfo) ts))
   (define ((torrent-source-with-tag? tag) ts)
     (and ts (pair? ts) (eq? tag (car ts)) (string? (cdr ts))))
-  (define (torrent-source? ts)
-    (or ((torrent-source-with-tag? 'filename) ts) ((torrent-source-with-tag? 'metainfo) ts)))
+  (define (filename? ts) ((torrent-source-with-tag? 'filename) ts))
+  (define (metainfo? ts) ((torrent-source-with-tag? 'metainfo) ts))
+  (define torrent-source? (or? filename? metainfo?))
 
   ;; @brief Make a function that returns #f or an argument pair
   ;; @param key The argument's key
@@ -296,29 +296,34 @@
                      ((list? ids) ids)
                      (else '()))))
        (lambda (ids)
-         (if (id? ids) (just ids)
+         (if (id? ids)
+             (just ids)
              (let ((ids (map proc-id ids)))
-               (if (every just? ids) (just (map unwrap ids)) nothing)))))
+               (if (every just? ids)
+                   (just (map unwrap ids))
+                   nothing)))))
      (->maybe ids)))
 
   (define (proc-array array)
-    ; The json egg serializes scheme lists as JSON arrays
+    ; The medea egg serializes Scheme lists as JSON objects, and Scheme vectors
+    ; as JSON arrays.
     (cond
-      ((vector? array) (just (vector->list array)))
-      ((list? array) (just array))
+      ((vector? array) (just array))
+      ((list? array) (just (list->vector array)))
       (else nothing)))
 
   (define (proc-list-of-strings strs)
-    (->maybe
-      ((assert*
-         'proc-list-of-strings
-         "a list of strings or #f"
-         (or? false? (cute every string? <>)))
-       strs)))
+    (maybe-map list->vector
+               (->maybe
+                 ((assert*
+                    'proc-list-of-strings
+                    "a list of strings or #f"
+                    (or? false? (cute every string? <>)))
+                  strs))))
 
   (define proc-fields proc-list-of-strings)
 
-  ;; TODO: Strict version
+  ; TODO: Strict version
   (define proc-object ->maybe)
 
   (define (format->argument val)
@@ -373,7 +378,7 @@
        (let ((method-str (symbol->string 'method)))
          (lambda (required ... #!key (tag #f) (key default) ...)
            (let ((required (required-handler required)) ... (key (key-handler key)) ...)
-             (let ((arguments (list->vector (filter identity `(,required ... ,key ...)))))
+             (let ((arguments (filter identity `(,required ... ,key ...))))
                (rpc-call method-str #:arguments arguments #:tag tag))))))
       ((make-rpc-call method (key default key-handler) ...)
        (make-rpc-call (method) (key default key-handler) ...))))
