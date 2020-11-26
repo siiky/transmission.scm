@@ -220,6 +220,7 @@
   ;;; General & Common Utilities
   ;;;
 
+  ; TODO: Take a look at SRFI-189.
   (define (just x)     `(just . ,x))
   (define nothing      'nothing)
   (define (just? x)    (and (pair? x) (eq? (car x) 'just)))
@@ -246,6 +247,7 @@
           (loop (maybe (car procs) x) (cdr procs)))))
 
   ;; For `torrent-add`
+  ; TODO: Take a look at SRFI-189.
   (define (filename str) `(filename . ,str))
   (define (metainfo str) `(metainfo . ,str))
   (define ((torrent-source-with-tag? tag) ts)

@@ -18,9 +18,11 @@
 (import chicken.pretty-print)
 (import chicken.process-context)
 (import chicken.repl)
+(import chicken.sort)
 
 (import optimism)
 (import srfi-1)
+(import srfi-42)
 
 (import transmission)
 (import transmission.utils)
@@ -42,15 +44,15 @@
             (pp arguments)
             (pp result))))))
 
-(define *OPTS*
-  `(((--host) . host)
-    ((--port) . ,string->number)
-    ((--username) . username)
-    ((--password) . password)
-    ((--session-id) . session-id)
-    ((--repl))))
-
 (define (init args)
+  (define *OPTS*
+    `(((--host) . host)
+      ((--port) . ,string->number)
+      ((--username) . username)
+      ((--password) . password)
+      ((--session-id) . session-id)
+      ((--repl))))
+
   (let ((pargs (parse-command-line args *OPTS*)))
     (let ((host (alist-ref '--host pargs))
           (port (alist-ref '--port pargs))
@@ -68,16 +70,25 @@
 (define (main args)
   (if (init args)
       (repl)
-      (let ((reply (torrent-get '("id" "downloadDir" "status" "uploadRatio") #:ids #f #:tag (unique-tag))))
+
+      (let ((reply (torrent-get '("id" "downloadDir" "status" "name") #:ids #f #:tag (unique-tag))))
+
         (assert (reply-success? reply))
-        (pp (filter
-              (lambda (obj)
-                (let ((status (reply-ref 'status obj))
-                      (upload-ratio (reply-ref 'uploadRatio obj))
-                      (download-dir (reply-ref 'downloadDir obj)))
-                  (and (member status `(,status-seed ,status-seed-wait) =)
-                       (> upload-ratio 2)
-                       (string=? download-dir "/some/path/to/files/"))))
-              (vector->list (reply-ref-path (reply-arguments reply) '(torrents))))))))
+        (let* ((ids (list-ec (:treply obj reply torrents)
+                             (:let status (reply-ref 'status obj))
+                             (:let download-dir (reply-ref 'downloadDir obj))
+                             (and (member status `(,status-seed ,status-seed-wait))
+                                  (string=? download-dir "/some/path/to/files/"))
+                             (:let id (reply-ref 'id obj))
+                             id))
+
+               (reply (torrent-get '("id" "uploadRatio") #:ids ids #:tag (unique-tag))))
+
+          (assert (reply-success? reply))
+          (pp (list-ec (:treply obj reply torrents)
+                       (:let upload-ratio (reply-ref 'uploadRatio obj))
+                       (if (> upload-ratio 2))
+                       (:let id (reply-ref 'id obj))
+                       id))))))
 
 (main (command-line-arguments))

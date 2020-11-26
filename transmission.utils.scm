@@ -15,6 +15,8 @@
    status-seed-wait
    status-stopped
 
+   :treply
+   alist-keep-keys
    unique-tag
    )
 
@@ -26,12 +28,25 @@
           alist-ref
           cute))
 
+  (import
+    (only srfi-1
+          filter))
+
+  ; This seems to work even without importing SRFI-42, which is awesome.
+  (define-syntax :treply
+    (syntax-rules ()
+      ((:treply cc var reply key ...)
+       (:vector cc var (reply-ref-path (reply-arguments reply) '(key ...))))))
+
   (define unique-tag
     (let ((n 0))
       (lambda ()
         (let ((ret n))
           (set! n (+ n 1))
           ret))))
+
+  (define (alist-keep-keys alist . keys)
+    (filter (lambda (kv) (member (car kv) keys eq?)) alist))
 
   (define reply-ref alist-ref)
 
@@ -71,4 +86,10 @@
   (define status-download      4)
   (define status-seed-wait     5)
   (define status-seed          6)
+
+  ; TODO: Take a look at SRFI-189.
+  (define (transmission-do reply func)
+    (if (reply-success? reply)
+        (func (reply-arguments reply))
+        #f))
   )
