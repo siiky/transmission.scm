@@ -300,7 +300,7 @@
              (just ids)
              (let ((ids (map proc-id ids)))
                (if (every just? ids)
-                   (just (map unwrap ids))
+                   (just (list->vector (map unwrap ids)))
                    nothing)))))
      (->maybe ids)))
 
