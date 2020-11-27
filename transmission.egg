@@ -2,13 +2,15 @@
 ((author "siiky")
  (license "unlicense")
  (synopsis "Transmission RPC")
- (version "0.0.10")
+ (version "0.0.11")
  (dependencies
    http-client
    intarweb
    medea
    srfi-1
    uri-common)
+ (test-dependencies
+   test)
  (component-options
    ;(csc-options "-O0" "-d3")
    ;(linkage static)

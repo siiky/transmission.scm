@@ -8,10 +8,15 @@
    *url*
    *username*
 
-   update-request-session-id
-   handle-409
+   deserialize-message
    serialize-message
+
+   handle-409
+   http-call
+   make-message
    make-rpc-request
+   make-serialized-message
+   update-request-session-id
 
    rpc-call
 
@@ -28,6 +33,7 @@
     (only chicken.base
           and-let*
           assert
+          compose
           cute
           fixnum?
           identity
@@ -107,6 +113,9 @@
   ;;; Core Procedures
   ;;;
 
+  (define serialize-message json->string)
+  (define deserialize-message read-json)
+
   ;; @brief Create a request object
   ;; @param host The hostname of the RPC server
   ;; @param url See `rpc-url`
@@ -130,18 +139,23 @@
               #:password password)
       #:headers (headers `((x-transmission-session-id ,session-id)))))
 
-  ;; @brief Serialize a message, according to the spec
+  ;; @brief Create a Scheme representation of a message, according to the spec
+  ;; @param method The `method` field
+  ;; @param arguments The `arguments` field
+  ;; @param tag The `tag` field
+  ;; @returns A Scheme object representing a message
+  ;; @see Section 2.1
+  (define (make-message method arguments tag)
+    (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
+      `((method . ,method) . ,optional)))
+
+  ;; @brief Create and serialize a message, according to the spec
   ;; @param method The `method` field
   ;; @param arguments The `arguments` field
   ;; @param tag The `tag` field
   ;; @returns A string of the serialized JSON message
   ;; @see Section 2.1
-  (define (serialize-message method arguments tag)
-    (define (mkmsg method arguments tag)
-      (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
-        `((method . ,method) . ,optional)))
-
-    (json->string (mkmsg method arguments tag)))
+  (define make-serialized-message (compose serialize-message make-message))
 
   ;; @brief Update a request's `x-transmission-session-id` header
   ;; @param request The request
@@ -149,6 +163,13 @@
   ;; @returns The new request
   (define (update-request-session-id request #!optional (session-id (*session-id*)))
     (update-request request #:headers (headers `((x-transmission-session-id ,session-id)))))
+
+  ;; @brief Actually make the HTTP request to the server
+  ;; @param request The HTTP request object
+  ;; @param message The body of the HTTP request
+  ;; @returns The deserialized response of the RPC call
+  (define (http-call request message)
+    (with-input-from-request request message deserialize-message))
 
   ;; @brief Handle 409, according to the spec
   ;; @param condition The condition object
@@ -173,7 +194,7 @@
          (let ((session-id (car (header-values 'x-transmission-session-id (response-headers response)))))
            (*session-id* session-id)
            (let ((req (update-request-session-id request session-id)))
-             (with-input-from-request req message read-json))))
+             (http-call req message))))
 
         ; Rethrow any other errors
         (else
@@ -183,8 +204,8 @@
   ;; @param method A string naming an RPC method
   ;; @param arguments The arguments of this method
   ;; @param tag The tag for this call
-  ;; @returns A response object read with read-json, or #f in case of wrong
-  ;;          parameters
+  ;; @returns A response object read with deserialize-message, or #f in case of
+  ;;          wrong parameters
   ;;
   ;; Throws exceptions for HTTP errors, except for 409, which is handled
   ;;   according to 2.3.1; see http-client for other HTTP errors.
@@ -199,9 +220,9 @@
   (define (rpc-call method #!key (arguments #f) (tag #f))
     (define (call host url port username password method arguments tag)
       (let ((req (make-rpc-request host url port username password))
-            (message (serialize-message method arguments tag)))
+            (message (make-serialized-message method arguments tag)))
         (condition-case
-          (with-input-from-request req message read-json)
+          (http-call req message)
           (condition (exn http client-error) ; 409 is in this condition kind
                      (handle-409 condition req message)))))
 
