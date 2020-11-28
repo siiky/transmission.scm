@@ -35,6 +35,7 @@
           assert
           compose
           cute
+          declare
           fixnum?
           identity
           make-parameter
@@ -71,6 +72,18 @@
           filter)
     (only uri-common
           make-uri))
+
+  ; NOTE: Disable inlining for these functions, so that they can be overwritten
+  ;   in the tests. I don't quite understand the difference between `inline`
+  ;   and `inline-global`... `inline` is supposed to control inlining of
+  ;   functions inside of the module they're defined in, and `inline-global` is
+  ;   supposed to control inlining of functions across modules; but they both
+  ;   seem to do the job for the tests.
+  (declare
+    ; https://wiki.call-cc.org/man/5/Declarations#inline
+    (not inline
+         http-call
+         make-serialized-message))
 
   (define ((assert* loc type type?) x)
     (assert
@@ -312,20 +325,27 @@
   ;;   * a single hash (string);
   ;;   * a list of torrent IDs and hashes
   (define (proc-ids ids)
-    ((maybe-do
-       ; Handle "recently-active" and list of strings (hash) and integers (ID)
-       (lambda (ids)
-         (just (cond ((id? ids) (if (string? ids) ids `(,ids)))
-                     ((list? ids) ids)
-                     (else '()))))
-       (lambda (ids)
-         (if (id? ids)
-             (just ids)
-             (let ((ids (map proc-id ids)))
-               (if (every just? ids)
-                   (just (list->vector (map unwrap ids)))
-                   nothing)))))
-     (->maybe ids)))
+    (define (proc-ids-list ids)
+      (let ((ids (map proc-id ids)))
+        (if (every just? ids) (list->vector (map unwrap ids)) '#())))
+
+    (cond
+      ((false? ids)
+       nothing) ; Use all torrents if `ids` is ommited
+
+      ((and (string? ids) (string=? ids "recently-active"))
+       (just ids))
+
+      ((list? ids)
+       (just (proc-ids-list ids)))
+
+      ((vector? ids)
+       (just (proc-ids-list (vector->list ids))))
+
+      ((id? ids)
+       (just (proc-ids-list `(,ids))))
+
+      (else (just '#()))))
 
   (define (proc-array array)
     ; The medea egg serializes Scheme lists as JSON objects, and Scheme vectors
@@ -349,10 +369,11 @@
   ; TODO: Strict version
   (define proc-object ->maybe)
 
-  (define (format->argument val)
-    (case val
-      ((#f "objects" "table") (just val))
-      (else nothing)))
+  (define (format->argument format)
+    (define (proc-format format)
+      ;(with-output-to-port (current-error-port) (cute print val))
+      (->maybe (and (member format '("objects" "table")) format)))
+    (make-*->argument 'format proc-format))
 
   (define (proc-bool b) (if (nothing? b) nothing (just (->bool b))))
   (define (proc-string str) (->maybe (and str (string? str) str)))
@@ -463,7 +484,7 @@
     (upload-limit          #f      (make-number->argument 'uploadLimit))
     (upload-limited        nothing (make-bool->argument   'uploadLimited)))
 
-  (export-rpc-call (torrent-get (fields fields->argument)) (ids '() ids->argument) (format #f (make-*->argument 'format format->argument)))
+  (export-rpc-call (torrent-get (fields fields->argument)) (ids '() ids->argument) (format #f format->argument))
 
   ;; `source` must be a filename or metainfo, as described in section 3.4,
   ;;   and is constructed like so:

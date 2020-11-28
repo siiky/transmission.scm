@@ -9,20 +9,25 @@
   ; `msg` is the body of the HTTP request to be made to the server, as a
   ;   string.
   (lambda (req msg)
-    (with-output-to-port (current-error-port) (lambda () (print message)))
-    #t))
+    (with-output-to-port (current-error-port) (cute write msg))
+    'wut))
 
-;(set! rpc-call
-;  (lambda (method #!key (arguments #f) (tag #f))
-;    (with-output-to-port (current-error-port) (lambda () (print method)))
-;    #t))
+(set! make-serialized-message
+  (lambda (method arguments tag)
+    ;(with-output-to-port (current-error-port) (cute print "HELLO FROM MAKE-SERIALIZED-MESSAGE"))
+    (make-message method arguments tag)))
 
 (test-group "transmission"
-  (test "Basic `rpc-call` test" #t (torrent-get '("id") #:tag (unique-tag)))
+  ; TODO: The `format` field shouldn't be in the message.
+  ; ((method . "torrent-get")
+  ;  (arguments (fields . #("id"))
+  ;             (ids . #())
+  ;             (format . #f))
+  ;  (tag . 0))
+  (test-assert "Basic phony test" (torrent-get '("id") #:tag (unique-tag)))
   )
 
 (test-group "transmission.utils"
-  (test "Basic `rpc-call` test" #t (torrent-get '("id") #:tag (unique-tag)))
   )
 
 (test-exit)

@@ -1,6 +1,6 @@
 # Build Variables
 
-EGG_SRC := transmission.scm
+EGG_SRC := transmission.scm transmission.utils.scm
 EXAMPLE_SRC := example.scm
 SRC := $(EGG_SRC) $(EXAMPLE_SRC)
 
@@ -9,6 +9,9 @@ default: $(EGG_SRC)
 
 install: $(EGG_SRC)
 	chicken-install
+
+test: $(EGG_SRC)
+	chicken-install -n -test
 
 clean:
 	chicken-clean
