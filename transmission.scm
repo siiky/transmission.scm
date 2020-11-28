@@ -36,7 +36,9 @@
           compose
           cute
           declare
+          define-constant
           fixnum?
+          gensym
           identity
           make-parameter
           o)
@@ -255,9 +257,10 @@
   ;;;
 
   ; TODO: Take a look at SRFI-189.
-  (define (just x)     `(just . ,x))
-  (define nothing      'nothing)
-  (define (just? x)    (and (pair? x) (eq? (car x) 'just)))
+  (define-constant just-sym (gensym 'just))
+  (define-constant nothing  (gensym 'nothing))
+  (define (just x)     `(,just-sym . ,x))
+  (define (just? x)    (and (pair? x) (eq? (car x) just-sym)))
   (define (nothing? x) (eq? x nothing))
   (define (maybe? x)   (or (nothing? x) (just? x)))
   (define (unwrap x)   (cdr x))
@@ -301,17 +304,16 @@
     (let ((x (proc x)))
       (and (just? x) `(,key . ,(unwrap x)))))
 
-  (define (id? id)
-    (or (fixnum? id)
-        (and (string? id)
-             (or (= (string-length id) 40) ; SHA1
-                 (string=? id "recently-active")))))
+  ; TODO: Strict version
+  (define proc-object ->maybe)
 
-  ;; @brief Pre-process an ID
-  ;; @param id An ID
-  ;; @returns A Maybe
-  (define (proc-id id)
-    (->maybe (and id (id? id) id)))
+  (define format->argument
+    (make-*->argument
+      'format
+      (lambda (format)
+        (case format
+          (("objects" "table") => just)
+          (else nothing)))))
 
   ;; @brief Pre-process a list of IDs
   ;; @param ids A list of IDs
@@ -324,67 +326,82 @@
   ;;   * a single ID (fixnum);
   ;;   * a single hash (string);
   ;;   * a list of torrent IDs and hashes
-  (define (proc-ids ids)
-    (define (proc-ids-list ids)
-      (let ((ids (map proc-id ids)))
-        (if (every just? ids) (list->vector (map unwrap ids)) '#())))
+  (define ids->argument
+    (make-*->argument
+      'ids
+      (lambda (ids)
+        (define (id? id)
+          (or (fixnum? id)
+              (and (string? id)
+                   (or (= (string-length id) 40) ; SHA1
+                       (string=? id "recently-active")))))
 
-    (cond
-      ((false? ids)
-       nothing) ; Use all torrents if `ids` is ommited
+        (define (proc-ids-list ids)
+          ;; @brief Pre-process an ID
+          ;; @param id An ID
+          ;; @returns A Maybe
+          (define (proc-id id)
+            (->maybe (and id (id? id) id)))
 
-      ((and (string? ids) (string=? ids "recently-active"))
-       (just ids))
+          (let ((ids (map proc-id ids)))
+            (if (every just? ids) (list->vector (map unwrap ids)) '#())))
 
-      ((list? ids)
-       (just (proc-ids-list ids)))
+        (cond
+          ((false? ids)
+           nothing) ; Use all torrents if `ids` is ommited
 
-      ((vector? ids)
-       (just (proc-ids-list (vector->list ids))))
+          ((and (string? ids) (string=? ids "recently-active"))
+           (just ids))
 
-      ((id? ids)
-       (just (proc-ids-list `(,ids))))
+          ((list? ids)
+           (just (proc-ids-list ids)))
 
-      (else (just '#()))))
+          ((vector? ids)
+           (just (proc-ids-list (vector->list ids))))
 
-  (define (proc-array array)
-    ; The medea egg serializes Scheme lists as JSON objects, and Scheme vectors
-    ; as JSON arrays.
-    (cond
-      ((vector? array) (just array))
-      ((list? array) (just (list->vector array)))
-      (else nothing)))
+          ((id? ids)
+           (just (proc-ids-list `(,ids))))
 
-  (define (proc-list-of-strings strs)
-    (maybe-map list->vector
-               (->maybe
-                 ((assert*
-                    'proc-list-of-strings
-                    "a list of strings or #f"
-                    (or? false? (cute every string? <>)))
-                  strs))))
+          (else (just '#()))))))
 
-  (define proc-fields proc-list-of-strings)
+  (define fields->argument
+    (make-*->argument
+      'fields
+      (lambda (strs)
+        (maybe-map list->vector
+                   (->maybe
+                     ((assert*
+                        'fields->argument
+                        "a list of strings or #f"
+                        (or? false? (cute every string? <>)))
+                      strs))))))
 
-  ; TODO: Strict version
-  (define proc-object ->maybe)
+  (define (make-number->argument key)
+    (define (proc-number n)
+      (->maybe (and n (number? n) n)))
+    (make-*->argument key proc-number))
 
-  (define (format->argument format)
-    (define (proc-format format)
-      ;(with-output-to-port (current-error-port) (cute print val))
-      (->maybe (and (member format '("objects" "table")) format)))
-    (make-*->argument 'format proc-format))
+  (define (make-string->argument key)
+    (define (proc-string str)
+      (->maybe (and str (string? str) str)))
+    (make-*->argument key proc-string))
 
-  (define (proc-bool b) (if (nothing? b) nothing (just (->bool b))))
-  (define (proc-string str) (->maybe (and str (string? str) str)))
-  (define (proc-number n) (->maybe (and n (number? n) n)))
+  (define (make-bool->argument key)
+    (define (proc-bool b)
+      (if (nothing? b) nothing (just (->bool b))))
+    (make-*->argument key proc-bool))
 
-  (define ids->argument (make-*->argument 'ids proc-ids))
-  (define fields->argument (make-*->argument 'fields proc-fields))
-  (define (make-number->argument key) (make-*->argument key proc-number))
-  (define (make-string->argument key) (make-*->argument key proc-string))
-  (define (make-bool->argument key) (make-*->argument key proc-bool))
-  (define (make-array->argument key) (make-*->argument key proc-array))
+  (define (make-array->argument key)
+    (make-*->argument
+      key
+      (lambda (array)
+        ; The medea egg serializes Scheme lists as JSON objects, and Scheme vectors
+        ; as JSON arrays.
+        (cond
+          ((vector? array) (just array))
+          ((list? array) (just (list->vector array)))
+          (else nothing)))))
+
   (define (torrent-source->argument ts)
     ((assert* 'torrent-source->argument "a filename or metainfo" torrent-source?) ts))
 
