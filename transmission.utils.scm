@@ -6,6 +6,7 @@
    reply-ref-path
    reply-result
    reply-success?
+   reply-tag
 
    status-check
    status-check-wait
@@ -56,11 +57,14 @@
   (define (reply-arguments reply)
     (reply-ref 'arguments reply))
 
+  (define (reply-tag reply)
+    (reply-ref 'tag reply))
+
   (define (reply-result-success? result)
     (and (string? result) (string=? result "success")))
 
   (define (reply-success? reply)
-    (reply-result-success? (reply-result reply)))
+    (and reply (reply-result-success? (reply-result reply))))
 
   (define (reply-ref-path reply path #!optional (==? equal?))
     (cond

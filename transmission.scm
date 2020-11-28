@@ -76,11 +76,11 @@
           make-uri))
 
   ; NOTE: Disable inlining for these functions, so that they can be overwritten
-  ;   in the tests. I don't quite understand the difference between `inline`
-  ;   and `inline-global`... `inline` is supposed to control inlining of
-  ;   functions inside of the module they're defined in, and `inline-global` is
-  ;   supposed to control inlining of functions across modules; but they both
-  ;   seem to do the job for the tests.
+  ;       in the tests. I don't quite understand the difference between
+  ;       `inline` and `inline-global`... `inline` is supposed to control
+  ;       inlining of functions inside of the module they're defined in, and
+  ;       `inline-global` is supposed to control inlining of functions across
+  ;       modules; but they both seem to do the job for the tests.
   (declare
     ; https://wiki.call-cc.org/man/5/Declarations#inline
     (not inline
@@ -249,7 +249,11 @@
       (let ((username (*username*))
             (password (*password*))
             (arguments (and arguments (not (null? arguments)) arguments)))
-        (and (!xor username password)
+        ; NOTE: The spec (2.1, (3)) says `tag` is a number, but doesn't specify
+        ;       if it must be an integer. The server returns #f as the `tag`
+        ;       when a float is sent, so I think only integers are legal.
+        (and (or (false? tag) (fixnum? tag))
+             (!xor username password)
              (call host url port username password method arguments tag)))))
 
   ;;;
@@ -368,28 +372,29 @@
     (make-*->argument
       'fields
       (lambda (strs)
-        (maybe-map list->vector
-                   (->maybe
-                     ((assert*
-                        'fields->argument
-                        "a list of strings or #f"
-                        (or? false? (cute every string? <>)))
-                      strs))))))
+        (if (and (list? strs) (every string? strs))
+            (just (list->vector strs))
+            nothing))))
 
   (define (make-number->argument key)
-    (define (proc-number n)
-      (->maybe (and n (number? n) n)))
-    (make-*->argument key proc-number))
+    (make-*->argument
+      key
+      (lambda (n)
+        ; NOTE: Haven't tested, but it may be that numbers must actually be
+        ;       integers.
+        (->maybe (and (number? n) n)))))
 
   (define (make-string->argument key)
-    (define (proc-string str)
-      (->maybe (and str (string? str) str)))
-    (make-*->argument key proc-string))
+    (make-*->argument
+      key
+      (lambda (str)
+        (->maybe (and (string? str) str)))))
 
   (define (make-bool->argument key)
-    (define (proc-bool b)
-      (if (nothing? b) nothing (just (->bool b))))
-    (make-*->argument key proc-bool))
+    (make-*->argument
+      key
+      (lambda (b)
+        (if (nothing? b) nothing (just (->bool b))))))
 
   (define (make-array->argument key)
     (make-*->argument
@@ -463,7 +468,10 @@
        (export-rpc-call (method) key ...))))
 
   ;; Export RPC procedures of sections 3.1 and 4.6. These procedures have a
-  ;;   single optional parameter `ids`.
+  ;;   single optional parameter, `ids`. According to the RPC spec, no `ids`
+  ;;   parameter means "all IDs". As a fail-safe, the default here is '(),
+  ;;   which means "no IDs".
+  ;; @see ids->argument
   (define-syntax export-3.1/4.6
     (syntax-rules ()
       ((export-3.1/4.6 method)
@@ -534,6 +542,9 @@
 
   (export-rpc-call
     (torrent-rename-path
+      ; NOTE: This is a list of IDs, like other calls, but according to the
+      ;       spec it must have exactly one ID. This is not enforced in the
+      ;       API.
       (ids ids->argument)
       (path (make-string->argument 'path))
       (name (make-string->argument 'name))))
