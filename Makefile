@@ -11,7 +11,7 @@ install: $(EGG_SRC)
 	chicken-install
 
 test: $(EGG_SRC)
-	chicken-install -test
+	TEST_USE_ANSI=1 chicken-install -test
 
 clean:
 	chicken-clean

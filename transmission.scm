@@ -26,6 +26,9 @@
 
    filename
    metainfo
+
+   id?
+   format?
    )
 
   (import
@@ -311,13 +314,18 @@
   ; TODO: Strict version
   (define proc-object ->maybe)
 
+  (define (format? obj)
+    (case obj
+      (("objects" "table") #t)
+      (else #f)))
+
   (define format->argument
     (make-*->argument
       'format
       (lambda (format)
-        (case format
-          (("objects" "table") => just)
-          (else nothing)))))
+        (if (format? format)
+            (just format)
+            nothing))))
 
   ;; @brief Pre-process a list of IDs
   ;; @param ids A list of IDs
@@ -330,16 +338,16 @@
   ;;   * a single ID (fixnum);
   ;;   * a single hash (string);
   ;;   * a list of torrent IDs and hashes
+  (define (id? id)
+    (or (fixnum? id)
+        (and (string? id)
+             (or (= (string-length id) 40) ; SHA1
+                 (string=? id "recently-active")))))
+
   (define ids->argument
     (make-*->argument
       'ids
       (lambda (ids)
-        (define (id? id)
-          (or (fixnum? id)
-              (and (string? id)
-                   (or (= (string-length id) 40) ; SHA1
-                       (string=? id "recently-active")))))
-
         (define (proc-ids-list ids)
           ;; @brief Pre-process an ID
           ;; @param id An ID

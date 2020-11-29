@@ -10,6 +10,7 @@
    srfi-1
    uri-common)
  (test-dependencies
+   srfi-1
    test)
  (component-options
    ;(csc-options "-O0" "-d3")
