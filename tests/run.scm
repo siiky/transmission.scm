@@ -155,7 +155,10 @@
                    (test-3.1/4.6 arguments))
 
       ,(defhandler (torrent-remove msg method arguments tag)
-                   #f)
+                   (or (not arguments)
+                       (alist-let arguments (ids delete-local-data)
+                                  (and (false-or ids? ids)
+                                       (boolean? delete-local-data)))))
 
       ,(defhandler (torrent-rename-path msg method arguments tag)
                    #f)
@@ -223,10 +226,8 @@
                    (test-3.1/4.6 arguments)))))
 
 (define (test-ids function #!key (test-default? #t) (test-no-ids? #t))
-  (when test-default?
-    (test-assert (function)))
-  (when test-no-ids?
-    (test-assert (function #f)))
+  (when test-default? (test-assert (function)))
+  (when test-no-ids? (test-assert (function #f)))
   (test-assert (function '()))
   (test-assert (function "recently-active"))
   (test-assert (function 42))
@@ -282,7 +283,11 @@
                        (if (eq? ids 'none) '() `(#:ids ,ids))))))
   (test-group-3.1/4.6 "torrent-reannounce" torrent-reannounce)
 
-  ;(test-assert (torrent-remove #:tag (unique-tag)))
+  (test-group "torrent-remove"
+    (test-ids (lambda (#!optional (ids 'none))
+                (apply torrent-remove #:tag (unique-tag)
+                       (if (eq? ids 'none) '() `(#:ids ,ids))))))
+
   ;(test-assert (torrent-rename-path #:tag (unique-tag)))
 
   ; TODO

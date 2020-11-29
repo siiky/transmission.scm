@@ -539,7 +539,8 @@
     (priority-normal    #f      (make-array->argument  'priority-normal)))
 
   (export-rpc-call
-    (torrent-remove (ids ids->argument))
+    torrent-remove
+    (ids               '()     ids->argument)
     (delete-local-data nothing (make-bool->argument 'delete-local-data)))
 
   (export-rpc-call
