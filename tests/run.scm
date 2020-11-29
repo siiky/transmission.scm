@@ -203,7 +203,12 @@
                                arguments)))
 
       ,(defhandler (torrent-set-location msg method arguments tag)
-                   #t)
+                   (alist-let arguments (ids location move)
+                              (and ids
+                                   location
+                                   (ids? ids)
+                                   (string? location)
+                                   (boolean? move))))
 
       ,(defhandler (torrent-start msg method arguments tag)
                    (test-3.1/4.6 arguments))
@@ -217,10 +222,11 @@
       ,(defhandler (torrent-verify msg method arguments tag)
                    (test-3.1/4.6 arguments)))))
 
-(define (test-ids function #!optional (test-default? #t))
+(define (test-ids function #!key (test-default? #t) (test-no-ids? #t))
   (when test-default?
     (test-assert (function)))
-  (test-assert (function #f))
+  (when test-no-ids?
+    (test-assert (function #f)))
   (test-assert (function '()))
   (test-assert (function "recently-active"))
   (test-assert (function 42))
@@ -242,7 +248,7 @@
         (with-output-to-port
           (current-error-port)
           (lambda ()
-            (print "\n\nTHE MESSAGE:\t" msg "\n"))))
+            (print "\n\nTHE MESSAGE:\t" (with-output-to-string (cute write msg)) "\n"))))
       test-res)))
 
 (set! make-serialized-message make-message)
@@ -284,7 +290,8 @@
 
   (test-group "torrent-set-location"
     (test-ids (cute torrent-set-location <> "/some/phony/path/" #:tag (unique-tag))
-              #f))
+              #:test-default? #f
+              #:test-no-ids? #f))
 
   (test-group-3.1/4.6 "torrent-start" torrent-start)
   (test-group-3.1/4.6 "torrent-start-now" torrent-start-now)
