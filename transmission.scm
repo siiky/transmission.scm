@@ -24,8 +24,11 @@
    define-rpc-call
    export-rpc-call
 
-   filename
-   metainfo
+   torrent-source/filename
+   torrent-source/filename?
+   torrent-source/metainfo
+   torrent-source/metainfo?
+   torrent-source?
 
    id?
    format?
@@ -292,13 +295,19 @@
 
   ;; For `torrent-add`
   ; TODO: Take a look at SRFI-189.
-  (define (filename str) `(filename . ,str))
-  (define (metainfo str) `(metainfo . ,str))
-  (define ((torrent-source-with-tag? tag) ts)
-    (and ts (pair? ts) (eq? tag (car ts)) (string? (cdr ts))))
-  (define (filename? ts) ((torrent-source-with-tag? 'filename) ts))
-  (define (metainfo? ts) ((torrent-source-with-tag? 'metainfo) ts))
-  (define torrent-source? (or? filename? metainfo?))
+  ; NOTE: The 'filename and 'metainfo symbols are important, do not change
+  ;       them! They're used as the key in the arguments object.
+  (define (torrent-source/filename str) (and (string? str) `(filename . ,str)))
+  (define (torrent-source/metainfo str) (and (string? str) `(metainfo . ,str)))
+  (define ((torrent-source-with-tag? tag) obj)
+    (and (pair? obj) (eq? tag (car obj)) (string? (cdr obj))))
+  (define torrent-source/filename? (torrent-source-with-tag? 'filename))
+  (define torrent-source/metainfo? (torrent-source-with-tag? 'metainfo))
+  (define (torrent-source? obj)
+    (and (pair? obj)
+         (or (eq? (car obj) 'filename)
+             (eq? (car obj) 'metainfo))
+         (string? (cdr obj))))
 
   ;; @brief Make a function that returns #f or an argument pair
   ;; @param key The argument's key
@@ -416,7 +425,7 @@
           (else nothing)))))
 
   (define (torrent-source->argument ts)
-    ((assert* 'torrent-source->argument "a filename or metainfo" torrent-source?) ts))
+    (and (torrent-source? ts) ts))
 
   ;;;
   ;;; Method Definitions
@@ -521,8 +530,8 @@
 
   ;; `source` must be a filename or metainfo, as described in section 3.4,
   ;;   and is constructed like so:
-  ;;     (torrent-add (filename "/path/to/file.torrent") ...)
-  ;;     (torrent-add (metainfo "<base64 torrent file>") ...)
+  ;;     (torrent-add (torrent-source/filename "/path/to/file.torrent") ...)
+  ;;     (torrent-add (torrent-source/metainfo "<base64 torrent file>") ...)
   ;; Magnets go in `filename`.
   (export-rpc-call
     (torrent-add
@@ -545,18 +554,17 @@
 
   (export-rpc-call
     (torrent-set-location
-      (ids ids->argument)
       (location (make-string->argument 'location)))
+    (ids  '()     ids->argument)
     (move nothing (make-bool->argument 'move)))
 
   (export-rpc-call
     (torrent-rename-path
-      ; NOTE: This is a list of IDs, like other calls, but according to the
-      ;       spec it must have exactly one ID. This is not enforced in the
-      ;       API.
-      (ids ids->argument)
       (path (make-string->argument 'path))
-      (name (make-string->argument 'name))))
+      (name (make-string->argument 'name)))
+    ; NOTE: This is a list of IDs, like other calls, but according to the spec
+    ;       it must have exactly one ID. This is not enforced in the API.
+    (ids '() ids->argument))
 
   (export-rpc-call
     session-set

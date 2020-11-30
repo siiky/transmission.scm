@@ -7,29 +7,93 @@
     ((define! func formals body ...)
      (set! func (lambda formals body ...)))))
 
-(define-syntax alist-let
+(define-syntax alist-let/and
   (syntax-rules ()
-    ((alist-let alist (key ...)
-                body ...)
+    ((alist-let/and alist (key ...)
+                    body ...)
      (and alist
           (let ((key (alist-ref 'key alist))
                 ...)
             body
             ...)))))
 
+(define-syntax alist-let/nor
+  (syntax-rules ()
+    ((alist-let/nor alist (key ...)
+                    body ...)
+     (or (not alist)
+         (let ((key (alist-ref 'key alist))
+               ...)
+           body
+           ...)))))
+
 (define-syntax defhandler
   (syntax-rules ()
     ((defhandler (handler-name msg method arguments tag) body ...)
      `(,(symbol->string 'handler-name)
         . ,(lambda (msg)
-             (alist-let msg (method arguments tag)
-                        (and tag (begin body ...))))))))
+             (alist-let/and msg (method arguments tag)
+                            (and tag (begin body ...))))))))
+
+; test-all-values :: (a -> b) -> [a] -> Bool -> [b]
+; The Bool parameter is to choose whether to test the default value or not.
+(define-syntax test-all-values
+  (syntax-rules ()
+    ((test-all-values test-maker (val ...))
+     (test-all-values test-maker (val ...) #t))
+
+    ((test-all-values test-maker (val ...) #t)
+     (begin
+       (test-assert (test-maker))
+       (test-all-values test-maker (val ...) #f)))
+
+    ((test-all-values test-maker (val ...) #f)
+     (begin
+       (test-assert (test-maker val))
+       ...))))
+
+(define-syntax test-ids
+  (syntax-rules ()
+    ((test-ids test-maker)
+     (test-ids test-maker #t)) ; test-default?
+
+    ((test-ids test-maker test-default?)
+     (test-ids test-maker test-default? #t)) ; test-no-ids?
+
+    ((test-ids test-maker test-default? #t)
+     (test-all-values
+       test-maker
+       ('() "recently-active" 42 #f
+        "0000000000000000000000000000000000000000"
+        '(42 "0000000000000000000000000000000000000000"))
+       test-default?))
+
+    ((test-ids test-maker test-default? #f)
+     (test-all-values
+       test-maker
+       ('() "recently-active" 42
+        "0000000000000000000000000000000000000000"
+        '(42 "0000000000000000000000000000000000000000"))
+       test-default?))))
+
+(define-syntax test-group-3.1/4.6
+  (syntax-rules ()
+    ((test-group-3.1/4.6 function test-maker-name)
+     (test-group (symbol->string 'function)
+       (let ((test-maker-name (lambda (#!optional (ids 'none))
+                                (apply function #:tag (unique-tag)
+                                       (if (eq? ids 'none) '() `(#:ids ,ids))))))
+         (test-ids test-maker-name))))))
+
+(define (xor a b)
+  (and (or a b)
+       (not (and a b))))
 
 (define (false-or pred? obj)
   (or (not obj) (pred? obj)))
 
 (define (fields? obj)
-  (and (list? obj) (every string? obj)))
+  (and (vector? obj) (every string? (vector->list obj))))
 
 (define (ids? obj)
   (or (id? obj)
@@ -38,15 +102,15 @@
 (define handlers
   (let ((test-3.1/4.6
           (lambda (arguments)
-            (or (not arguments)
-                (alist-ref 'ids arguments eq? #f)))))
+            (alist-let/nor arguments (ids)
+                           ids))))
     `(
       ,(defhandler (blocklist-update msg method arguments tag)
                    (not arguments))
 
       ,(defhandler (free-space msg method arguments tag)
-                   (alist-let arguments (path)
-                              path))
+                   (alist-let/and arguments (path)
+                                  path))
 
       ,(defhandler (port-test msg method arguments tag)
                    (not arguments))
@@ -67,10 +131,8 @@
                    (not arguments))
 
       ,(defhandler (session-get msg method arguments tag)
-                   (or (not arguments)
-                       (alist-let arguments (fields)
-                                  (and (vector? fields)
-                                       (fields? (vector->list fields))))))
+                   (alist-let/nor arguments (fields)
+                                  (fields? fields)))
 
       ,(defhandler (session-set msg method arguments tag)
                    (let ((right-type-for-key?
@@ -136,32 +198,60 @@
                                  ((units) #t)
 
                                  (else #f))))))
-                     (false-or (cute every right-type-for-key?  <>)
-                               arguments)))
+                     (false-or (cute every right-type-for-key?  <>) arguments)))
 
       ,(defhandler (session-stats msg method arguments tag)
                    (not arguments))
 
       ,(defhandler (torrent-add msg method arguments tag)
-                   #f)
+                   (alist-let/and arguments
+                                  (
+                                   bandwidth-priority
+                                   cookies
+                                   download-dir
+                                   filename
+                                   files-unwanted
+                                   files-wanted
+                                   metainfo
+                                   paused
+                                   peer-limit
+                                   priority-high
+                                   priority-low
+                                   priority-normal
+                                   )
+                                  (and (xor (string? filename) (string? metainfo))
+                                       (false-or number? bandwidth-priority)
+                                       (false-or string? cookies)
+                                       (false-or string? download-dir)
+                                       (boolean? paused)
+                                       (false-or number? peer-limit)
+                                       ; TODO: array
+                                       ; files-unwanted
+                                       ; files-wanted
+                                       ; priority-high
+                                       ; priority-low
+                                       ; priority-normal
+                                       )))
 
       ,(defhandler (torrent-get msg method arguments tag)
-                   (alist-let arguments (fields ids format)
-                              (and fields
-                                   (false-or ids? ids)
-                                   (false-or format? format))))
+                   (alist-let/and arguments (fields ids format)
+                                  (and (fields? fields)
+                                       (false-or ids? ids)
+                                       (false-or format? format))))
 
       ,(defhandler (torrent-reannounce msg method arguments tag)
                    (test-3.1/4.6 arguments))
 
       ,(defhandler (torrent-remove msg method arguments tag)
-                   (or (not arguments)
-                       (alist-let arguments (ids delete-local-data)
+                   (alist-let/nor arguments (ids delete-local-data)
                                   (and (false-or ids? ids)
-                                       (boolean? delete-local-data)))))
+                                       (boolean? delete-local-data))))
 
       ,(defhandler (torrent-rename-path msg method arguments tag)
-                   #f)
+                   (alist-let/and arguments (path name ids)
+                                  (and (string? path)
+                                       (string? name)
+                                       (false-or ids? ids))))
 
       ,(defhandler (torrent-set msg method arguments tag)
                    (let ((right-type-for-key?
@@ -202,16 +292,13 @@
                                  ((ids) (ids? value))
                                  ((location) (string? value))
                                  (else #f))))))
-                     (false-or (cute every right-type-for-key?  <>)
-                               arguments)))
+                     (false-or (cute every right-type-for-key?  <>) arguments)))
 
       ,(defhandler (torrent-set-location msg method arguments tag)
-                   (alist-let arguments (ids location move)
-                              (and ids
-                                   location
-                                   (ids? ids)
-                                   (string? location)
-                                   (boolean? move))))
+                   (alist-let/and arguments (ids location move)
+                                  (and (string? location)
+                                       (false-or ids? ids)
+                                       (boolean? move))))
 
       ,(defhandler (torrent-start msg method arguments tag)
                    (test-3.1/4.6 arguments))
@@ -225,20 +312,7 @@
       ,(defhandler (torrent-verify msg method arguments tag)
                    (test-3.1/4.6 arguments)))))
 
-(define (test-ids function #!key (test-default? #t) (test-no-ids? #t))
-  (when test-default? (test-assert (function)))
-  (when test-no-ids? (test-assert (function #f)))
-  (test-assert (function '()))
-  (test-assert (function "recently-active"))
-  (test-assert (function 42))
-  (test-assert (function "0000000000000000000000000000000000000000"))
-  (test-assert (function '(42 "0000000000000000000000000000000000000000"))))
-
-(define (test-group-3.1/4.6 group-name function)
-  (test-group group-name
-    (test-ids (lambda (#!optional (ids 'none))
-                (apply function #:tag (unique-tag)
-                       (if (eq? ids 'none) '() `(#:ids ,ids)))))))
+(define-constant bool-values '(#f #t))
 
 (define!
   http-call (req msg)
@@ -262,46 +336,69 @@
   (test-assert (blocklist-update #:tag (unique-tag)))
   (test-assert (free-space "/some/phony/path/" #:tag (unique-tag)))
   (test-assert (port-test #:tag (unique-tag)))
-  (test-group-3.1/4.6 "queue-move-bottom" queue-move-bottom)
-  (test-group-3.1/4.6 "queue-move-down" queue-move-down)
-  (test-group-3.1/4.6 "queue-move-top" queue-move-top)
-  (test-group-3.1/4.6 "queue-move-up" queue-move-up)
+  (test-group-3.1/4.6 queue-move-bottom queue-move-bottom/test)
+  (test-group-3.1/4.6 queue-move-down queue-move-down/test)
+  (test-group-3.1/4.6 queue-move-top queue-move-top/test)
+  (test-group-3.1/4.6 queue-move-up queue-move-up/test)
   (test-assert (session-close #:tag (unique-tag)))
+
   (test-group "session-get"
     (test-assert (session-get #:tag (unique-tag)))
     (test-assert (session-get #:fields '("encryption") #:tag (unique-tag))))
 
-  ; TODO
+  ; TODO: Test the different key parameters. This is bugging me... I can't
+  ;       think of a good way to do it.
   (test-assert (session-set #:tag (unique-tag)))
 
   (test-assert (session-stats #:tag (unique-tag)))
 
-  ;(test-assert (torrent-add #:tag (unique-tag)))
+  ; TODO: Test the different key parameters. This is bugging me... I can't
+  ;       think of a good way to do it.
+  (test-group "torrent-add"
+    (test-assert (torrent-add (torrent-source/filename "/some/phony/path/to/file.torrent") #:tag (unique-tag)))
+    (test-assert (torrent-add (torrent-source/metainfo "c29tZSBwaG9ueSB0b3JyZW50IGZpbGUK") #:tag (unique-tag))))
+
   (test-group "torrent-get"
-    (test-ids (lambda (#!optional (ids 'none))
-                (apply torrent-get '("id") #:tag (unique-tag)
-                       (if (eq? ids 'none) '() `(#:ids ,ids))))))
-  (test-group-3.1/4.6 "torrent-reannounce" torrent-reannounce)
+    (let ((torrent-get/test
+            (lambda (#!optional (ids 'none))
+              (apply torrent-get '("id") #:tag (unique-tag)
+                     (if (eq? ids 'none) '() `(#:ids ,ids))))))
+      (test-ids torrent-get/test)))
+  (test-group-3.1/4.6 torrent-reannounce torrent-reannounce/test)
 
   (test-group "torrent-remove"
-    (test-ids (lambda (#!optional (ids 'none))
-                (apply torrent-remove #:tag (unique-tag)
-                       (if (eq? ids 'none) '() `(#:ids ,ids))))))
+    (let ((torrent-remove/test
+            (lambda (#!optional (ids 'none))
+              (apply torrent-remove #:tag (unique-tag)
+                     (if (eq? ids 'none) '() `(#:ids ,ids))))))
+      (test-ids torrent-remove/test)))
 
-  ;(test-assert (torrent-rename-path #:tag (unique-tag)))
+  (test-group "torrent-rename-path"
+    (let ((torrent-rename-path/test
+            (lambda (#!optional (ids 'none))
+              (apply torrent-rename-path
+                     "/some/phony/path/"
+                     "/some/other/phony/path/"
+                     #:tag (unique-tag)
+                     (if (eq? ids 'none) '() `(#:ids ,ids))))))
+      (test-ids torrent-rename-path/test #t #f)))
 
-  ; TODO
+  ; TODO: Test the different key parameters. This is bugging me... I can't
+  ;       think of a good way to do it.
   (test-assert (torrent-set #:tag (unique-tag)))
 
   (test-group "torrent-set-location"
-    (test-ids (cute torrent-set-location <> "/some/phony/path/" #:tag (unique-tag))
-              #:test-default? #f
-              #:test-no-ids? #f))
+    (let ((torrent-set-location/test
+            (lambda (#!optional (ids 'none))
+              (apply torrent-set-location "/some/phony/path/"
+                     #:tag (unique-tag)
+                     (if (eq? ids 'none) '() `(#:ids ,ids))))))
+      (test-ids torrent-set-location/test #t #f)))
 
-  (test-group-3.1/4.6 "torrent-start" torrent-start)
-  (test-group-3.1/4.6 "torrent-start-now" torrent-start-now)
-  (test-group-3.1/4.6 "torrent-stop" torrent-stop)
-  (test-group-3.1/4.6 "torrent-verify" torrent-verify))
+  (test-group-3.1/4.6 torrent-start torrent-start/test)
+  (test-group-3.1/4.6 torrent-start-now torrent-start-now/test)
+  (test-group-3.1/4.6 torrent-stop torrent-stop/test)
+  (test-group-3.1/4.6 torrent-verify torrent-verify/test))
 
 (test-group "transmission.utils"
   )
