@@ -7,26 +7,6 @@
     ((define! func formals body ...)
      (set! func (lambda formals body ...)))))
 
-(define-syntax alist-let/and
-  (syntax-rules ()
-    ((alist-let/and alist (key ...)
-                    body ...)
-     (and alist
-          (let ((key (alist-ref 'key alist))
-                ...)
-            body
-            ...)))))
-
-(define-syntax alist-let/nor
-  (syntax-rules ()
-    ((alist-let/nor alist (key ...)
-                    body ...)
-     (or (not alist)
-         (let ((key (alist-ref 'key alist))
-               ...)
-           body
-           ...)))))
-
 (define-syntax defhandler
   (syntax-rules ()
     ((defhandler (handler-name msg method arguments tag) body ...)

@@ -8,17 +8,20 @@
    reply-success?
    reply-tag
 
-   status-check
-   status-check-wait
-   status-download
-   status-download-wait
-   status-seed
-   status-seed-wait
-   status-stopped
+   status/check
+   status/check-wait
+   status/download
+   status/download-wait
+   status/seed
+   status/seed-wait
+   status/stopped
 
-   :treply
    alist-keep-keys
    unique-tag
+
+   :treply
+   alist-let/and
+   alist-let/nor
    )
 
   (import
@@ -38,6 +41,27 @@
     (syntax-rules ()
       ((:treply cc var reply key ...)
        (:vector cc var (reply-ref-path (reply-arguments reply) '(key ...))))))
+
+  (define-syntax alist-let/and
+    (syntax-rules ()
+      ((alist-let/and alist (key ...)
+                      body ...)
+       (and alist
+            (let ((key (alist-ref 'key alist))
+                  ...)
+              body
+              ...)))))
+
+  (define-syntax alist-let/nor
+    (syntax-rules ()
+      ((alist-let/nor alist (key ...)
+                      body ...)
+       (or (not alist)
+           (let ((key (alist-ref 'key alist))
+                 ...)
+             body
+             ...)))))
+
 
   (define unique-tag
     (let ((n 0))
@@ -83,13 +107,13 @@
       (else #f)))
 
   ;; tr_torrent_activity from libtransmission/transmission.h
-  (define status-stopped       0)
-  (define status-check-wait    1)
-  (define status-check         2)
-  (define status-download-wait 3)
-  (define status-download      4)
-  (define status-seed-wait     5)
-  (define status-seed          6)
+  (define status/stopped       0)
+  (define status/check-wait    1)
+  (define status/check         2)
+  (define status/download-wait 3)
+  (define status/download      4)
+  (define status/seed-wait     5)
+  (define status/seed          6)
 
   ; TODO: Take a look at SRFI-189.
   (define (transmission-do reply func)
