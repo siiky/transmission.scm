@@ -25,8 +25,9 @@
    )
 
   (import
-    scheme
-    scheme.base
+    (except scheme
+            member)
+    vector-lib
     (only chicken.base
           add1
           alist-ref
@@ -35,7 +36,10 @@
 
   (import
     (only srfi-1
-          filter))
+          filter
+          member)
+    (only vector-lib
+          vector-map))
 
   ; This seems to work even without importing SRFI-42, which is awesome.
   (define-syntax :treply

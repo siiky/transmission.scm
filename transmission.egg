@@ -9,7 +9,8 @@
    intarweb
    medea
    srfi-1
-   uri-common)
+   uri-common
+   vector-lib)
  (test-dependencies
    srfi-1
    test)
