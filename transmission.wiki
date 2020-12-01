@@ -7,7 +7,7 @@
 === Description
 
 An egg to work with [[https://github.com/transmission/transmission|Transmission]]'s
-RPC. It assumes familiarity with the [[https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt|RPC spec]].
+RPC. It assumes familiarity with the [[https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt|spec]].
 
 === Author
 
@@ -21,21 +21,21 @@ siiky
 
 The following eggs are required for using this egg:
 
- * [[http-client]]
- * [[intarweb]]
- * [[medea]]
- * [[srfi-1]]
- * [[uri-common]]
- * [[vector-lib]]
+* [[http-client]]
+* [[intarweb]]
+* [[medea]]
+* [[srfi-1]]
+* [[uri-common]]
+* [[vector-lib]]
 
 The following eggs are required for testing this egg:
 
- * [[srfi-1]]
- * [[test]]
+* [[srfi-1]]
+* [[test]]
 
 === API
 
-==== {{transmission}}
+==== {{transmission}} module
 
 ===== Parameters
 
@@ -118,14 +118,14 @@ is the {{arguments}} object, containing both required and optional arguments.
 <procedure>(make-message method arguments tag)</procedure>
 <procedure>(make-rpc-request host url port username password #!optional (session-id (*session-id*)))</procedure>
 
-==== {{transmission.utils}}
+==== {{transmission.utils}} module
 
 <syntax>(alist-let/and alist (key ...) body ...)</syntax>
 <syntax>(alist-let/nor alist (key ...) body ...)</syntax>
 
 Equivalent to:
 
-<enscript highlight="scm">
+<enscript highlight="scheme">
 (let ((key (alist-ref 'key alist))
       ...)
   body
@@ -170,21 +170,39 @@ The torrent status.
 
 === Examples
 
-<enscript highlight="scm">
-(parameterize ((*username* "username")
+<enscript highlight="scheme">
+(import srfi-1 transmission transmission.utils)
+
+(parameterize ((*host* "hostname")
+               (*username* "username")
                (*password* "password"))
-  ...)
+  (let* ((tag (unique-tag))
+         (reply (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f #:tag tag)))
+    (assert (reply-success? reply))
+    (let ((result (reply-result reply))
+          (arguments (reply-arguments reply)))
+      (assert (eq? (reply-tag reply) tag))
+      (alist-let/and arguments (torrents)
+                     (let ((wanted-tors
+                             (filter
+                               (lambda (tor)
+                                 (alist-let/and tor (downloadDir status uploadRatio)
+                                                (and (= status status/seed)
+                                                     (> uploadRatio 1)
+                                                     (string=? downloadDir "/some/path/"))))
+                               (vector->list torrents))))
+                       (for-each print wanted-tors))))))
 </enscript>
 
 === License
 
   This is free and unencumbered software released into the public domain.
-
+  
   Anyone is free to copy, modify, publish, use, compile, sell, or
   distribute this software, either in source code form or as a compiled
   binary, for any purpose, commercial or non-commercial, and by any
   means.
-
+  
   In jurisdictions that recognize copyright laws, the author or authors
   of this software dedicate any and all copyright interest in the
   software to the public domain. We make this dedication for the benefit
@@ -192,7 +210,7 @@ The torrent status.
   successors. We intend this dedication to be an overt act of
   relinquishment in perpetuity of all present and future rights to this
   software under copyright law.
-
+  
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
@@ -200,7 +218,7 @@ The torrent status.
   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
   OTHER DEALINGS IN THE SOFTWARE.
-
+  
   For more information, please refer to <http://unlicense.org>
 
 === Version History

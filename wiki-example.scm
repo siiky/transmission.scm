@@ -1,0 +1,21 @@
+(import srfi-1 transmission transmission.utils)
+
+(parameterize ((*host* "hostname")
+               (*username* "username")
+               (*password* "password"))
+  (let* ((tag (unique-tag))
+         (reply (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f #:tag tag)))
+    (assert (reply-success? reply))
+    (let ((result (reply-result reply))
+          (arguments (reply-arguments reply)))
+      (assert (eq? (reply-tag reply) tag))
+      (alist-let/and arguments (torrents)
+                     (let ((wanted-tors
+                             (filter
+                               (lambda (tor)
+                                 (alist-let/and tor (downloadDir status uploadRatio)
+                                                (and (= status status/seed)
+                                                     (> uploadRatio 1)
+                                                     (string=? downloadDir "/some/path/"))))
+                               (vector->list torrents))))
+                       (for-each print wanted-tors))))))
