@@ -288,14 +288,6 @@
   (define (maybe-map f x)
     (maybe (o just f) x))
 
-  ;; maybe-do :: [(a -> Maybe b)] -> Maybe a -> Maybe b
-  (define ((maybe-do . procs) x)
-    (let loop ((x x) (procs procs))
-      ; NOTE: Not a fold so it can exit early.
-      (if (or (null? procs) (nothing? x))
-          x
-          (loop (maybe (car procs) x) (cdr procs)))))
-
   ;; For `torrent-add`
   ; TODO: Take a look at SRFI-189.
   ; NOTE: The 'filename and 'metainfo symbols are important, do not change
