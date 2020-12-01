@@ -1,0 +1,210 @@
+[[tags: egg transmission]]
+
+== transmission
+
+[[toc:]]
+
+=== Description
+
+An egg to work with [[https://github.com/transmission/transmission|Transmission]]'s
+RPC. It assumes familiarity with the [[https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt|RPC spec]].
+
+=== Author
+
+siiky
+
+=== Repository
+
+[[https://github.com/siiky/transmission.scm]]
+
+=== Requirements
+
+The following eggs are required for using this egg:
+
+ * [[http-client]]
+ * [[intarweb]]
+ * [[medea]]
+ * [[srfi-1]]
+ * [[uri-common]]
+ * [[vector-lib]]
+
+The following eggs are required for testing this egg:
+
+ * [[srfi-1]]
+ * [[test]]
+
+=== API
+
+==== {{transmission}}
+
+===== Parameters
+
+<parameter>*host*</parameter>
+<parameter>*url*</parameter>
+<parameter>*port*</parameter>
+<parameter>*username*</parameter>
+<parameter>*password*</parameter>
+<parameter>*session-id*</parameter>
+
+===== High-level RPC API
+
+Every method of the spec is defined, and naming is followed almost directly. In
+the spec, all methods and most arguments follow {{kebab-case}}. The exceptions
+are a few arguments in {{camelCase}} -- these are converted to {{kebab-case}}
+in this egg: e.g., the key argument for {{queuePosition}} is called
+{{queue-position}}. Note, however, that the messages are left untouched: a
+message to/from the server will still use {{queuePosition}} as the key, **NOT**
+{{queue-position}}.
+
+Almost all required parameters are positional arguments in the library -- the
+only exception is the {{ids}} argument, which is always a key argument, even
+for methods with required {{ids}}, because it defaults to no IDs to avoid
+acting on torrents by accident.
+
+All optional arguments in the spec are key arguments in the library.
+
+<procedure>torrent-source/filename</procedure>
+<procedure>torrent-source/metainfo</procedure>
+
+To be used with {{torrent-add}}.
+
+===== Low-level API
+
+{{method}} is a method name, which will be used as the method name in messages
+and, in the case of {{define-rpc-call}}, {{export-rpc-call}}, and
+{{export-3.1/4.6}}, the name of the define procedure.
+
+{{required}} is the name of a required argument. It will not be used in
+messages.
+
+{{key}} is the name of an optional (key) argument. It will be used as the key
+name in the created procedure.
+
+{{required-handler}} and {{key-handler}} are functions that will process a
+given value, to assure it has the right type/format, and return an entry ready
+to be inserted into the {{arguments}} object of a message.
+
+{{default}} is the default value of an optional (key) argument.
+
+<macro>(make-rpc-call (method (required required-handler) ...) (key default key-handler) ...)</macro>
+<macro>(make-rpc-call method (key default key-handler) ...)</macro>
+
+Create a procedure to represent an RPC method.
+
+<macro>(define-rpc-call (method required ...) key ...)</macro>
+<macro>(define-rpc-call method key ...)</macro>
+
+Like {{make-rpc-call}} but defines the created procedure.
+
+<macro>(export-rpc-call (method required ...) key ...)</macro>
+<macro>(export-rpc-call method key ...)</macro>
+
+Like {{define-rpc-call}} but exports the defined procedure.
+
+<macro>(export-3.1/4.6 method)</macro>
+
+Export RPC procedures of sections 3.1 and 4.6 of the spec, which have a single
+optional {{ids}} argument.
+
+<procedure>(rpc-call method #!key (arguments #f) (tag #f))</procedure>
+
+Make an RPC call. {{method}} is the name of the RPC method, and {{arguments}}
+is the {{arguments}} object, containing both required and optional arguments.
+
+<procedure>(handle-409 condition request message)</procedure>
+<procedure>(http-call request message)</procedure>
+<procedure>(update-request-session-id request #!optional (session-id (*session-id*)))</procedure>
+<procedure>(make-serialized-message method arguments tag)</procedure>
+<procedure>(make-message method arguments tag)</procedure>
+<procedure>(make-rpc-request host url port username password #!optional (session-id (*session-id*)))</procedure>
+
+==== {{transmission.utils}}
+
+<syntax>(alist-let/and alist (key ...) body ...)</syntax>
+<syntax>(alist-let/nor alist (key ...) body ...)</syntax>
+
+Equivalent to:
+
+<enscript highlight="scm">
+(let ((key (alist-ref 'key alist))
+      ...)
+  body
+  ...)
+</enscript>
+
+Except that, with {{alist-let/and}}, if {{alist}} is false, the value of the
+whole expression is false; and with {{alist-let/nor}}, if {{alist}} is false,
+the value of the whole expression is true.
+
+<procedure>(unique-tag #!optional (new-n #f))</procedure>
+
+Return an unique tag, that starts at 0 and is incremented by 1 on each call. If
+{{new-n}} is given and is a {{fixnum?}}, set the internal variable to {{new-n}}
+for future use.
+
+<procedure>(reply-result reply)</procedure>
+
+Return the {{result}} value of a reply.
+
+<procedure>(reply-arguments reply)</procedure>
+
+Return the {{arguments}} value of a reply.
+
+<procedure>(reply-tag reply)</procedure>
+
+Return the {{tag}} value of a reply.
+
+<procedure>(reply-success? reply)</procedure>
+
+Return {{#t}} if the {{result}} value is {{"success"}}, {{#f}} otherwise.
+
+<constant>status/stopped</constant>
+<constant>status/check-wait</constant>
+<constant>status/check</constant>
+<constant>status/download-wait</constant>
+<constant>status/download</constant>
+<constant>status/seed-wait</constant>
+<constant>status/seed</constant>
+
+The torrent status.
+
+=== Examples
+
+<enscript highlight="scm">
+(parameterize ((*username* "username")
+               (*password* "password"))
+  ...)
+</enscript>
+
+=== License
+
+  This is free and unencumbered software released into the public domain.
+
+  Anyone is free to copy, modify, publish, use, compile, sell, or
+  distribute this software, either in source code form or as a compiled
+  binary, for any purpose, commercial or non-commercial, and by any
+  means.
+
+  In jurisdictions that recognize copyright laws, the author or authors
+  of this software dedicate any and all copyright interest in the
+  software to the public domain. We make this dedication for the benefit
+  of the public at large and to the detriment of our heirs and
+  successors. We intend this dedication to be an overt act of
+  relinquishment in perpetuity of all present and future rights to this
+  software under copyright law.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+  OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+  ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+  OTHER DEALINGS IN THE SOFTWARE.
+
+  For more information, please refer to <http://unlicense.org>
+
+=== Version History
+
+==== 0.1.0 (2020/12/01)
+
+Initial release with all methods defined, and almost all tested.

@@ -84,8 +84,8 @@ directly. In the [spec][rpc-spec], all methods and most arguments follow
 `kebab-case`. The exceptions are a few arguments in `camelCase`; these are
 converted to `kebab-case` in this egg: e.g., the key argument for
 `queuePosition` is called `queue-position`. Note, however, that the messages
-are left untouched: a message to/from the server will still have
-`queuePosition` as the key, **NOT** `queue-position`.
+are left untouched: a message to/from the server will still use `queuePosition`
+as the key, **NOT** `queue-position`.
 
 ### Core Procedures
 
