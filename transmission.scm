@@ -84,9 +84,9 @@
   ; NOTE: Disable inlining for these functions, so that they can be overwritten
   ;       in the tests. I don't quite understand the difference between
   ;       `inline` and `inline-global`... `inline` is supposed to control
-  ;       inlining of functions inside of the module they're defined in, and
-  ;       `inline-global` is supposed to control inlining of functions across
-  ;       modules; but they both seem to do the job for the tests.
+  ;       inlining inside of the module, which is what we need, and
+  ;       `inline-global` is supposed to control inlining across modules; but
+  ;       they both seem to do the job for the tests.
   (declare
     ; https://wiki.call-cc.org/man/5/Declarations#inline
     (not inline
@@ -137,17 +137,17 @@
   (define serialize-message json->string)
   (define deserialize-message read-json)
 
-  ;; @brief Create a request object
-  ;; @param host The hostname of the RPC server
-  ;; @param url See `rpc-url`
-  ;; @param port See `rpc-port`
-  ;; @param username See `rpc-username`
-  ;; @param password See `rpc-password`
-  ;; @param session-id The `x-transmission-session-id` header
-  ;; @returns A request object
+  ;; @brief Create a request object.
+  ;; @param host The server's hostname.
+  ;; @param url See `rpc-url`.
+  ;; @param port See `rpc-port`.
+  ;; @param username See `rpc-username`.
+  ;; @param password See `rpc-password`.
+  ;; @param session-id The `x-transmission-session-id` header.
+  ;; @returns A request object.
   ;;
   ;; @a username and @a password are only required if
-  ;;   `rpc-authentication-required` is enabled
+  ;;   `rpc-authentication-required` is enabled in the server.
   (define (make-rpc-request host url port username password #!optional (session-id (*session-id*)))
     (make-request
       #:method 'POST
@@ -160,48 +160,48 @@
               #:password password)
       #:headers (headers `((x-transmission-session-id ,session-id)))))
 
-  ;; @brief Create a Scheme representation of a message, according to the spec
-  ;; @param method The `method` field
-  ;; @param arguments The `arguments` field
-  ;; @param tag The `tag` field
-  ;; @returns A Scheme object representing a message
-  ;; @see Section 2.1
+  ;; @brief Create a Scheme representation of a message, according to the spec.
+  ;; @param method The `method` field.
+  ;; @param arguments The `arguments` field.
+  ;; @param tag The `tag` field.
+  ;; @returns A Scheme object representing a message.
+  ;; @see Section 2.1.
   (define (make-message method arguments tag)
     (let ((optional (filter cdr `((arguments . ,arguments) (tag . ,tag)))))
       `((method . ,method) . ,optional)))
 
-  ;; @brief Create and serialize a message, according to the spec
-  ;; @param method The `method` field
-  ;; @param arguments The `arguments` field
-  ;; @param tag The `tag` field
-  ;; @returns A string of the serialized JSON message
-  ;; @see Section 2.1
+  ;; @brief Create and serialize a message, according to the spec.
+  ;; @param method The `method` field.
+  ;; @param arguments The `arguments` field.
+  ;; @param tag The `tag` field.
+  ;; @returns A string with the serialized JSON message.
+  ;; @see Section 2.1.
   (define make-serialized-message (compose serialize-message make-message))
 
-  ;; @brief Update a request's `x-transmission-session-id` header
-  ;; @param request The request
-  ;; @param session-id The new session ID
-  ;; @returns The new request
+  ;; @brief Update a request's `x-transmission-session-id` header.
+  ;; @param request The request.
+  ;; @param session-id The new session ID.
+  ;; @returns The updated request.
   (define (update-request-session-id request #!optional (session-id (*session-id*)))
     (update-request request #:headers (headers `((x-transmission-session-id ,session-id)))))
 
-  ;; @brief Actually make the HTTP request to the server
-  ;; @param request The HTTP request object
-  ;; @param message The body of the HTTP request
-  ;; @returns The deserialized response of the RPC call
+  ;; @brief Actually make the HTTP request to the server.
+  ;; @param request The HTTP request object.
+  ;; @param message The body of the HTTP request.
+  ;; @returns The deserialized response of the RPC call.
   (define (http-call request message)
     (with-input-from-request request message deserialize-message))
 
-  ;; @brief Handle 409, according to the spec
-  ;; @param condition The condition object
-  ;; @param request The request
-  ;; @param message The RPC message
-  ;; @returns The deserialized response of the RPC call
+  ;; @brief Handle 409, according to the spec.
+  ;; @param condition The condition object.
+  ;; @param request The request.
+  ;; @param message The RPC message.
+  ;; @returns The deserialized response of the RPC call.
   ;;
   ;; If the condition is caused by anything other than 409, the exception is
   ;;   propagated. In case of 409, the new session ID is read from the response
-  ;;   headers and we try again. If this second try results in an error, it is
-  ;;   propagated.
+  ;;   headers and we try again. If this second try results in an error,
+  ;;   it is propagated.
   (define (handle-409 condition request message)
     (let ((response (get-condition-property condition 'client-error 'response)))
 
@@ -221,10 +221,10 @@
         (else
           (signal condition)))))
 
-  ;; @brief Make an RPC call to a Transmission daemon
-  ;; @param method A string naming an RPC method
-  ;; @param arguments The arguments of this method
-  ;; @param tag The tag for this call
+  ;; @brief Make an RPC call to a Transmission daemon.
+  ;; @param method A string naming an RPC method.
+  ;; @param arguments The arguments of this method.
+  ;; @param tag The tag for this call.
   ;; @returns A response object read with deserialize-message, or #f in case of
   ;;          wrong parameters
   ;;
@@ -234,8 +234,8 @@
   ;; `rpc-call` returns #f if parameters are wrong. Some parameters are
   ;;   mandatory (with defaults provided): `*host*`, `*url*`, `*port*`.
   ;;   Others are optional: `*session-id*`, `*password*`, `*username*`.
-  ;;   `*password*` and `*username*` are, however, optional "together";
-  ;;   they must both be #f or a string.
+  ;;   `*password*` and `*username*` are, however, optional "together"
+  ;;   -- they must both be #f or a string.
   ;;
   ;; See the medea egg for how to encode arguments and decode responses.
   (define (rpc-call method #!key (arguments #f) (tag #f))
@@ -258,7 +258,7 @@
         ; NOTE: The spec (2.1, (3)) says `tag` is a number, but doesn't specify
         ;       if it must be an integer. The server returns #f as the `tag`
         ;       when a float is sent, so I think only integers are legal.
-        (and (or (false? tag) (fixnum? tag))
+        (and ((or? false? fixnum?) tag)
              (!xor username password)
              (call host url port username password method arguments tag)))))
 
@@ -276,19 +276,22 @@
   (define (unwrap x)   (cdr x))
 
   (define (->maybe b)
-    (cond ((or (false? b) (nothing? b)) nothing)
+    (cond (((or? false? nothing?) b) nothing)
           ((just? b) b)
           (else (just b))))
 
+  ;; maybe :: (a -> Maybe b) -> Maybe a -> Maybe b
   (define (maybe f x)
-    ((assert* 'maybe "a maybe" maybe?) x)
     (if (just? x) (f (unwrap x)) nothing))
 
+  ;; maybe-map :: (a -> b) -> Maybe a -> Maybe b
   (define (maybe-map f x)
     (maybe (o just f) x))
 
+  ;; maybe-do :: [(a -> Maybe b)] -> Maybe a -> Maybe b
   (define ((maybe-do . procs) x)
     (let loop ((x x) (procs procs))
+      ; NOTE: Not a fold so it can exit early.
       (if (or (null? procs) (nothing? x))
           x
           (loop (maybe (car procs) x) (cdr procs)))))
@@ -309,13 +312,14 @@
              (eq? (car obj) 'metainfo))
          (string? (cdr obj))))
 
-  ;; @brief Make a function that returns #f or an argument pair
-  ;; @param key The argument's key
-  ;; @param proc Function that processes an input value
-  ;; @returns A function that, from an input value, returns #f or an argument pair
+  ;; @brief Make a function that returns #f or an argument pair.
+  ;; @param key The argument's key.
+  ;; @param proc Function that processes an input value.
+  ;; @returns A function that, from an input value, returns #f or an argument
+  ;;          pair.
   ;;
   ;; @a proc must return a Maybe. If the result of proc is Nothing, it returns
-  ;;   #f, and if the result is Just, it returns an argument pair.
+  ;;   #f, and if the result is a Just, it returns an argument pair.
   (define ((make-*->argument key proc) x)
     (let ((x (proc x)))
       (and (just? x) `(,key . ,(unwrap x)))))
@@ -336,9 +340,15 @@
             (just format)
             nothing))))
 
-  ;; @brief Pre-process a list of IDs
-  ;; @param ids A list of IDs
-  ;; @returns A Maybe
+  (define (id? id)
+    (or (fixnum? id)
+        (and (string? id)
+             (or (= (string-length id) 40) ; SHA1
+                 (string=? id "recently-active")))))
+
+  ;; @brief Pre-process a list of IDs.
+  ;; @param ids A list of IDs.
+  ;; @returns A Maybe.
   ;;
   ;; @a ids can be:
   ;;   * '() meaning no torrent (the default);
@@ -347,22 +357,16 @@
   ;;   * a single ID (fixnum);
   ;;   * a single hash (string);
   ;;   * a list of torrent IDs and hashes
-  (define (id? id)
-    (or (fixnum? id)
-        (and (string? id)
-             (or (= (string-length id) 40) ; SHA1
-                 (string=? id "recently-active")))))
-
   (define ids->argument
     (make-*->argument
       'ids
       (lambda (ids)
         (define (proc-ids-list ids)
-          ;; @brief Pre-process an ID
-          ;; @param id An ID
-          ;; @returns A Maybe
+          ;; @brief Pre-process an ID.
+          ;; @param id An ID.
+          ;; @returns A Maybe.
           (define (proc-id id)
-            (->maybe (and id (id? id) id)))
+            (->maybe (and (id? id) id)))
 
           (let ((ids (map proc-id ids)))
             (if (every just? ids) (list->vector (map unwrap ids)) '#())))
@@ -389,9 +393,10 @@
     (make-*->argument
       'fields
       (lambda (strs)
-        (if (and (list? strs) (every string? strs))
-            (just (list->vector strs))
-            nothing))))
+        (->maybe
+          (and (list? strs)
+               (every string? strs)
+               (list->vector strs))))))
 
   (define (make-number->argument key)
     (make-*->argument
@@ -417,13 +422,17 @@
     (make-*->argument
       key
       (lambda (array)
-        ; The medea egg serializes Scheme lists as JSON objects, and Scheme vectors
-        ; as JSON arrays.
+        ; The medea egg serializes Scheme lists as JSON objects, and Scheme
+        ;   vectors as JSON arrays.
         (cond
           ((vector? array) (just array))
           ((list? array) (just (list->vector array)))
           (else nothing)))))
 
+  ; This is a slightly different case than the others. The others use
+  ;   `make-*->argument` which assumes the processing function returns the
+  ;   value, but not the key. In this case, both key and value are already in
+  ;   the `ts` object.
   (define (torrent-source->argument ts)
     (and (torrent-source? ts) ts))
 
@@ -431,14 +440,14 @@
   ;;; Method Definitions
   ;;;
 
-  ;; @brief Create an RPC procedure
-  ;; @param method The name of the RPC method
-  ;; @param required A required parameter
-  ;; @param required-handler A handler for a required parameter
-  ;; @param key A key parameter
-  ;; @param default The default value for a key parameter
-  ;; @param key-handler A handler for a key parameter
-  ;; @returns An RPC procedure
+  ;; @brief Create a procedure for a single RPC method.
+  ;; @param method The name of the RPC method.
+  ;; @param required A required parameter.
+  ;; @param required-handler A handler for a required parameter.
+  ;; @param key A key parameter.
+  ;; @param default The default value for a key parameter.
+  ;; @param key-handler A handler for a key parameter.
+  ;; @returns An RPC procedure.
   ;;
   ;; This macro creates an RPC procedure described by the given parameters.
   ;;
@@ -450,10 +459,10 @@
   ;;
   ;; Examples:
   ;;
-  ;; A call of no arguments (other than `tag`)
+  ;; A call of no arguments (other than `tag`):
   ;;   (make-rpc-call some-method)
   ;;
-  ;; A call with one required argument `fields` and one key argument `ids`
+  ;; A call with one required argument `fields` and one key argument `ids`:
   ;;   (make-rpc-call (some-method (fields fields->argument)) (ids '() ids->argument))
   (define-syntax make-rpc-call
     (syntax-rules ()
@@ -466,7 +475,7 @@
       ((make-rpc-call method (key default key-handler) ...)
        (make-rpc-call (method) (key default key-handler) ...))))
 
-  ;; Like `make-rpc-call` but defines the created procedure
+  ;; Like `make-rpc-call` but defines the created procedure.
   (define-syntax define-rpc-call
     (syntax-rules ()
       ((define-rpc-call (method required ...) key ...)
@@ -474,7 +483,7 @@
       ((define-rpc-call method key ...)
        (define-rpc-call (method) key ...))))
 
-  ;; Like `define-rpc-call` but exports the defined procedure
+  ;; Like `define-rpc-call` but exports the defined procedure.
   (define-syntax export-rpc-call
     (syntax-rules ()
       ((export-rpc-call (method required ...) key ...)
@@ -528,7 +537,7 @@
 
   (export-rpc-call (torrent-get (fields fields->argument)) (ids '() ids->argument) (format #f format->argument))
 
-  ;; `source` must be a filename or metainfo, as described in section 3.4,
+  ;; `source` must be a `filename` or `metainfo`, as described in section 3.4,
   ;;   and is constructed like so:
   ;;     (torrent-add (torrent-source/filename "/path/to/file.torrent") ...)
   ;;     (torrent-add (torrent-source/metainfo "<base64 torrent file>") ...)

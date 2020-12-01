@@ -31,8 +31,8 @@ Install dependencies and compile:
 
 ```sh
 make
-# start a transmission-daemon for playing with
-# see the Makefile for more details
+# Start a transmission-daemon for playing with.
+# See the Makefile for more details.
 # ^C or `(session-close)` in csi to stop
 make start-transmission
 ```
@@ -81,9 +81,11 @@ and the correct `X-Transmission-Session-Id` will be set.
 
 Every method of the [spec][rpc-spec] is defined, and naming is followed almost
 directly. In the [spec][rpc-spec], all methods and most arguments follow
-`kebab-case`. The exceptions are a few arguments in `camelCase`. These are
-converted to `kebab-case` in this egg. E.g. `queuePosition` is converted to
-`queue-position`.
+`kebab-case`. The exceptions are a few arguments in `camelCase`; these are
+converted to `kebab-case` in this egg: e.g., the key argument for
+`queuePosition` is called `queue-position`. Note, however, that the messages
+are left untouched: a message to/from the server will still have
+`queuePosition` as the key, **NOT** `queue-position`.
 
 ### Core Procedures
 
@@ -97,9 +99,17 @@ Updates a `request` object's `X-Transmission-Session-Id` header. See section
 Handles an exception caused by a `409` error. See section **2.3.1** of the
 [spec][rpc-spec].
 
+#### `make-message`
+
+Create a Scheme representation of an RPC message.
+
 #### `serialize-message`
 
 Serialize an RPC message to JSON.
+
+#### `make-serialized-message`
+
+Create and serialize an RPC message.
 
 #### `make-rpc-request`
 

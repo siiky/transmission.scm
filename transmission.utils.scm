@@ -30,7 +30,8 @@
     (only chicken.base
           add1
           alist-ref
-          cute))
+          cute
+          fixnum?))
 
   (import
     (only srfi-1
@@ -65,10 +66,14 @@
 
   (define unique-tag
     (let ((n 0))
-      (lambda ()
-        (let ((ret n))
-          (set! n (+ n 1))
-          ret))))
+      (lambda (#!optional (new-n #f))
+        (if (fixnum? new-n)
+            (begin
+              (set! n new-n)
+              (unique-tag))
+            (let ((ret n))
+              (set! n (add1 n))
+              ret)))))
 
   (define (alist-keep-keys alist . keys)
     (filter (lambda (kv) (member (car kv) keys eq?)) alist))

@@ -73,4 +73,4 @@ start-transmission: $(DOWNLOAD_DIR)
 	transmission-daemon $(TRANSMISSION_ARGS) 2>&1 | tee $(LOG_FILE)
 	rm start-transmission
 
-.PHONY: clean csi daemon_running default example lint
+.PHONY: clean csi daemon_running default example install lint test

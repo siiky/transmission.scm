@@ -2,11 +2,6 @@
 (import test srfi-1)
 (import transmission transmission.utils)
 
-(define-syntax define!
-  (syntax-rules ()
-    ((define! func formals body ...)
-     (set! func (lambda formals body ...)))))
-
 (define-syntax defhandler
   (syntax-rules ()
     ((defhandler (handler-name msg method arguments tag) body ...)
@@ -294,17 +289,17 @@
 
 (define-constant bool-values '(#f #t))
 
-(define!
-  http-call (req msg)
-  (and-let* ((method (alist-ref 'method msg eq?))
-             (handler (alist-ref method handlers string=?)))
-    (let ((test-res (handler msg)))
-      (unless test-res
-        (with-output-to-port
-          (current-error-port)
-          (lambda ()
-            (print "\n\nTHE MESSAGE:\t" (with-output-to-string (cute write msg)) "\n"))))
-      test-res)))
+(set!  http-call
+  (lambda (req msg)
+    (and-let* ((method (alist-ref 'method msg eq?))
+               (handler (alist-ref method handlers string=?)))
+      (let ((test-res (handler msg)))
+        (unless test-res
+          (with-output-to-port
+            (current-error-port)
+            (lambda ()
+              (print "\n\nTHE MESSAGE:\t" (with-output-to-string (cute write msg)) "\n"))))
+        test-res))))
 
 (set! make-serialized-message make-message)
 
@@ -381,6 +376,21 @@
   (test-group-3.1/4.6 torrent-verify torrent-verify/test))
 
 (test-group "transmission.utils"
-  )
+  (define success-reply '((result . "success") (arguments . args) (tag . #t)))
+  (define error-reply '((result . "error") (arguments . args) (tag . #t)))
+
+  (test-assert (fixnum? (unique-tag)))
+
+  (test-group "reply-success?"
+    (test-assert (not (reply-success? error-reply)))
+    (test-assert (reply-success? success-reply)))
+
+  (test-group "reply-tag"
+    (test-assert (reply-tag error-reply))
+    (test-assert (reply-tag success-reply)))
+
+  (test-group "reply-arguments"
+    (test 'args (reply-arguments error-reply))
+    (test 'args (reply-arguments success-reply))))
 
 (test-exit)
