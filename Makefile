@@ -20,7 +20,7 @@ lint: $(SRC)
 	chicken-lint $(SRC)
 
 test-new-egg:
-	test-new-egg transmission https://raw.githubusercontent.com/siiky/transmission.scm/master/transmission.release-info
+	test-new-egg transmission https://raw.githubusercontent.com/SiIky/transmission.scm/master/transmission.release-info
 
 # Transmission Daemon Settings
 
