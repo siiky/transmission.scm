@@ -66,7 +66,13 @@ All optional arguments in the spec are key arguments in the library.
 <procedure>torrent-source/filename</procedure>
 <procedure>torrent-source/metainfo</procedure>
 
-To be used with {{torrent-add}}.
+Create a torrent source to use with {{torrent-add}}. A torrent can be added
+from a magnet URL; or from a torrent file, given the file's path, which must be
+accessible by the Transmission daemon, or the contents of the file, encoded in
+Base64.
+
+{{torrent-source/filename}} is used for magnets and file paths;
+{{torrent-source/metainfo}} is used for Base64 encoded torrent files.
 
 ===== Low-level API
 
@@ -168,6 +174,21 @@ Return {{#t}} if the {{result}} value is {{"success"}}, {{#f}} otherwise.
 
 The torrent status.
 
+<procedure>(default-error-proc result tag)</procedure>
+<procedure>(with-transmission-reply reply success-proc #!key (error-proc default-error-proc) (tag #f))</procedure>
+
+Convenient way to handle an RPC call's reply.
+
+{{reply}} is the return value of an RPC call; {{success-proc}} is an unary
+procedure that will be called with the reply's {{arguments}} object, in case of
+success; {{error-proc}} is a binary procedure (defaulting to
+{{default-error-proc}}) that will be called with the reply's {{result}} and
+{{tag}} values, in case of error; if {{tag}} is given and is a {{fixnum?}},
+then {{with-transmission-reply}} checks that it is the same as the reply's
+{{tag}}.
+
+{{default-error-proc}} simply calls {{error}} with the given parameters.
+
 === Examples
 
 <enscript highlight="scheme">
@@ -222,6 +243,10 @@ The torrent status.
   For more information, please refer to <http://unlicense.org>
 
 === Version History
+
+==== 0.1.1 (2020/12/02)
+
+Add {{with-transmission-reply}} and update the documentation accordingly.
 
 ==== 0.1.0 (2020/12/01)
 
