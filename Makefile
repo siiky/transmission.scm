@@ -1,7 +1,7 @@
 # Build Variables
 
 EGG_SRC := transmission.scm transmission.utils.scm
-EXAMPLE_SRC := example.scm
+EXAMPLE_SRC := example.scm wiki-example.scm
 SRC := $(EGG_SRC) $(EXAMPLE_SRC)
 
 default: $(EGG_SRC)
@@ -19,6 +19,9 @@ clean:
 lint: $(SRC)
 	chicken-lint $(SRC)
 
+test-new-egg:
+	test-new-egg transmission https://raw.githubusercontent.com/siiky/transmission.scm/master/transmission.release-info
+
 # Transmission Daemon Settings
 
 AUTH_NO_AUTH := --auth # --no-auth
@@ -26,6 +29,7 @@ CONFIG_DIR := transmission_config
 DHT_NO_DHT := --no-dht # --dht
 DOWNLOAD_DIR := transmission_download
 ENCRYPTION := --encryption-required
+HOST := localhost
 LOGGING := --log-debug
 LPD_NO_LPD := --no-lpd # --lpd
 PASSWORD := password
@@ -52,9 +56,10 @@ TRANSMISSION_ARGS := \
     -f \
 
 CSI_ARGS := \
-    --username $(USERNAME) \
+    --host $(HOST) \
     --password $(PASSWORD) \
     --port $(RPC_PORT) \
+    --username $(USERNAME) \
 
 $(DOWNLOAD_DIR):
 	mkdir $(DOWNLOAD_DIR)
@@ -62,15 +67,18 @@ $(DOWNLOAD_DIR):
 daemon_running:
 	[ -f start-transmission ] # transmission is not running; run `make start-transmission`
 
-csi: $(EXAMPLE_SRC) daemon_running
-	csi -q -s example.scm --repl $(CSI_ARGS)
+csi: default
+	csi -setup-mode -R transmission -R transmission.utils
 
-example: $(EXAMPLE_SRC) daemon_running
-	csi -q -s example.scm $(CSI_ARGS)
+example_repl: default $(EXAMPLE_SRC) daemon_running
+	csi -setup-mode -q -s example.scm --repl $(CSI_ARGS)
+
+example: default $(EXAMPLE_SRC) daemon_running
+	csi -setup-mode -q -s example.scm $(CSI_ARGS)
 
 start-transmission: $(DOWNLOAD_DIR)
 	touch start-transmission
 	transmission-daemon $(TRANSMISSION_ARGS) 2>&1 | tee $(LOG_FILE)
 	rm start-transmission
 
-.PHONY: clean csi daemon_running default example install lint test
+.PHONY: clean csi daemon_running default example example_repl install lint test test-new-egg

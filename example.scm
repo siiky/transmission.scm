@@ -18,7 +18,6 @@
 (import chicken.pretty-print)
 (import chicken.process-context)
 (import chicken.repl)
-(import chicken.sort)
 
 (import optimism)
 (import srfi-1)

@@ -53,8 +53,8 @@ the spec, all methods and most arguments follow {{kebab-case}}. The exceptions
 are a few arguments in {{camelCase}} -- these are converted to {{kebab-case}}
 in this egg: e.g., the key argument for {{queuePosition}} is called
 {{queue-position}}. Note, however, that the messages are left untouched: a
-message to/from the server will still use {{queuePosition}} as the key, **NOT**
-{{queue-position}}.
+message to/from the server will still use {{queuePosition}} as the key,
+'''NOT''' {{queue-position}}.
 
 Almost all required parameters are positional arguments in the library -- the
 only exception is the {{ids}} argument, which is always a key argument, even
@@ -72,7 +72,7 @@ To be used with {{torrent-add}}.
 
 {{method}} is a method name, which will be used as the method name in messages
 and, in the case of {{define-rpc-call}}, {{export-rpc-call}}, and
-{{export-3.1/4.6}}, the name of the define procedure.
+{{export-3.1/4.6}}, the name of the defined procedure.
 
 {{required}} is the name of a required argument. It will not be used in
 messages.
