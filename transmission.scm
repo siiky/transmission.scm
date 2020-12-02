@@ -361,7 +361,7 @@
             (->maybe (and (id? id) id)))
 
           (let ((ids (map proc-id ids)))
-            (if (every just? ids) (list->vector (map unwrap ids)) '#())))
+            (if (every just? ids) (list->vector (map unwrap ids)) #())))
 
         (cond
           ((false? ids)
@@ -379,7 +379,7 @@
           ((id? ids)
            (just (proc-ids-list `(,ids))))
 
-          (else (just '#()))))))
+          (else (just #()))))))
 
   (define fields->argument
     (make-*->argument

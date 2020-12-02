@@ -176,22 +176,22 @@ The torrent status.
 (parameterize ((*host* "hostname")
                (*username* "username")
                (*password* "password"))
-  (let* ((tag (unique-tag))
-         (reply (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f #:tag tag)))
-    (assert (reply-success? reply))
-    (let ((result (reply-result reply))
-          (arguments (reply-arguments reply)))
-      (assert (eq? (reply-tag reply) tag))
-      (alist-let/and arguments (torrents)
-                     (let ((wanted-tors
-                             (filter
-                               (lambda (tor)
-                                 (alist-let/and tor (downloadDir status uploadRatio)
-                                                (and (= status status/seed)
-                                                     (> uploadRatio 1)
-                                                     (string=? downloadDir "/some/path/"))))
-                               (vector->list torrents))))
-                       (for-each print wanted-tors))))))
+  (let ((tag (unique-tag)))
+    (with-transmission-reply
+      (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f #:tag tag)
+      (lambda (arguments)
+        (define (want-torrent? tor)
+          (alist-let/and tor (downloadDir status uploadRatio)
+                         (and (= status status/seed)
+                              (> uploadRatio 1)
+                              (string=? downloadDir "/some/path/"))))
+        (alist-let/and arguments (torrents)
+                       (let ((wanted-tors (filter want-torrent?  (vector->list torrents))))
+                         (for-each print wanted-tors))))
+      #:error-proc
+      (lambda (result tag)
+        (error 'here "torrent-get call failed with the following error" result))
+      #:tag tag)))
 </enscript>
 
 === License

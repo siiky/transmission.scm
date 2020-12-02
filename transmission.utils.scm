@@ -8,6 +8,9 @@
    reply-success?
    reply-tag
 
+   default-error-proc
+   with-transmission-reply
+
    status/check
    status/check-wait
    status/download
@@ -32,6 +35,7 @@
           add1
           alist-ref
           cute
+          error
           fixnum?))
 
   (import
@@ -124,9 +128,22 @@
   (define status/seed-wait     5)
   (define status/seed          6)
 
+  (define (default-error-proc result tag)
+    (let ((msg (string-append
+                 "RPC call "
+                 (if (fixnum? tag)
+                     (string-append "with tag " (number->string tag))
+                     "")
+                 " failed with the following error")))
+      (error 'default-error-proc msg result)))
+
   ; TODO: Take a look at SRFI-189.
-  (define (transmission-do reply func)
-    (if (reply-success? reply)
-        (func (reply-arguments reply))
-        #f))
+  (define (with-transmission-reply reply success-proc #!key (error-proc default-error-proc) (tag #f))
+    (let ((result (and reply (reply-result reply)))
+          (tag (and (fixnum? tag) tag))
+          (rtag (and tag reply (reply-tag reply))))
+      (if (and (eq? tag rtag)
+               (reply-result-success? result))
+          (success-proc (reply-arguments reply))
+          (error-proc result rtag))))
   )
