@@ -4,11 +4,13 @@
 
 (define-syntax defhandler
   (syntax-rules ()
-    ((defhandler (handler-name msg method arguments tag) body ...)
+    ((defhandler (handler-name arguments tag) body ...)
      `(,(symbol->string 'handler-name)
-        . ,(lambda (msg)
-             (alist-let/and msg (method arguments tag)
-                            (and tag (begin body ...))))))))
+        . ,(lambda (result)
+             (with-transmission-result
+               result
+               (lambda (arguments tag . _) (and tag (begin body ...)))
+               (lambda _ #f)))))))
 
 ; test-all-values :: (a -> b) -> [a] -> Bool -> [b]
 ; The Bool parameter is to choose whether to test the default value or not.
@@ -80,36 +82,36 @@
             (alist-let/nor arguments (ids)
                            ids))))
     `(
-      ,(defhandler (blocklist-update msg method arguments tag)
+      ,(defhandler (blocklist-update arguments tag)
                    (not arguments))
 
-      ,(defhandler (free-space msg method arguments tag)
+      ,(defhandler (free-space arguments tag)
                    (alist-let/and arguments (path)
                                   path))
 
-      ,(defhandler (port-test msg method arguments tag)
+      ,(defhandler (port-test arguments tag)
                    (not arguments))
 
-      ,(defhandler (queue-move-bottom msg method arguments tag)
+      ,(defhandler (queue-move-bottom arguments tag)
                    (test-3.1/4.6 arguments))
 
-      ,(defhandler (queue-move-down msg method arguments tag)
+      ,(defhandler (queue-move-down arguments tag)
                    (test-3.1/4.6 arguments))
 
-      ,(defhandler (queue-move-top msg method arguments tag)
+      ,(defhandler (queue-move-top arguments tag)
                    (test-3.1/4.6 arguments))
 
-      ,(defhandler (queue-move-up msg method arguments tag)
+      ,(defhandler (queue-move-up arguments tag)
                    (test-3.1/4.6 arguments))
 
-      ,(defhandler (session-close msg method arguments tag)
+      ,(defhandler (session-close arguments tag)
                    (not arguments))
 
-      ,(defhandler (session-get msg method arguments tag)
+      ,(defhandler (session-get arguments tag)
                    (alist-let/nor arguments (fields)
                                   (fields? fields)))
 
-      ,(defhandler (session-set msg method arguments tag)
+      ,(defhandler (session-set arguments tag)
                    (let ((right-type-for-key?
                            (lambda (kv)
                              (let ((key (car kv))
@@ -175,10 +177,10 @@
                                  (else #f))))))
                      (false-or (cute every right-type-for-key?  <>) arguments)))
 
-      ,(defhandler (session-stats msg method arguments tag)
+      ,(defhandler (session-stats arguments tag)
                    (not arguments))
 
-      ,(defhandler (torrent-add msg method arguments tag)
+      ,(defhandler (torrent-add arguments tag)
                    (alist-let/and arguments
                                   (
                                    bandwidth-priority
@@ -208,27 +210,27 @@
                                        ; priority-normal
                                        )))
 
-      ,(defhandler (torrent-get msg method arguments tag)
+      ,(defhandler (torrent-get arguments tag)
                    (alist-let/and arguments (fields ids format)
                                   (and (fields? fields)
                                        (false-or ids? ids)
                                        (false-or format? format))))
 
-      ,(defhandler (torrent-reannounce msg method arguments tag)
+      ,(defhandler (torrent-reannounce arguments tag)
                    (test-3.1/4.6 arguments))
 
-      ,(defhandler (torrent-remove msg method arguments tag)
+      ,(defhandler (torrent-remove arguments tag)
                    (alist-let/nor arguments (ids delete-local-data)
                                   (and (false-or ids? ids)
                                        (boolean? delete-local-data))))
 
-      ,(defhandler (torrent-rename-path msg method arguments tag)
+      ,(defhandler (torrent-rename-path arguments tag)
                    (alist-let/and arguments (path name ids)
                                   (and (string? path)
                                        (string? name)
                                        (false-or ids? ids))))
 
-      ,(defhandler (torrent-set msg method arguments tag)
+      ,(defhandler (torrent-set arguments tag)
                    (let ((right-type-for-key?
                            (lambda (kv)
                              (let ((key (car kv))
@@ -269,22 +271,22 @@
                                  (else #f))))))
                      (false-or (cute every right-type-for-key?  <>) arguments)))
 
-      ,(defhandler (torrent-set-location msg method arguments tag)
+      ,(defhandler (torrent-set-location arguments tag)
                    (alist-let/and arguments (ids location move)
                                   (and (string? location)
                                        (false-or ids? ids)
                                        (boolean? move))))
 
-      ,(defhandler (torrent-start msg method arguments tag)
+      ,(defhandler (torrent-start arguments tag)
                    (test-3.1/4.6 arguments))
 
-      ,(defhandler (torrent-start-now msg method arguments tag)
+      ,(defhandler (torrent-start-now arguments tag)
                    (test-3.1/4.6 arguments))
 
-      ,(defhandler (torrent-stop msg method arguments tag)
+      ,(defhandler (torrent-stop arguments tag)
                    (test-3.1/4.6 arguments))
 
-      ,(defhandler (torrent-verify msg method arguments tag)
+      ,(defhandler (torrent-verify arguments tag)
                    (test-3.1/4.6 arguments)))))
 
 (define-constant bool-values '(#f #t))
@@ -308,89 +310,95 @@
 (*port* 0)
 
 (test-group "transmission"
-  (test-assert (blocklist-update #:tag (unique-tag)))
-  (test-assert (free-space "/some/phony/path/" #:tag (unique-tag)))
-  (test-assert (port-test #:tag (unique-tag)))
-  (test-group-3.1/4.6 queue-move-bottom queue-move-bottom/test)
-  (test-group-3.1/4.6 queue-move-down queue-move-down/test)
-  (test-group-3.1/4.6 queue-move-top queue-move-top/test)
-  (test-group-3.1/4.6 queue-move-up queue-move-up/test)
-  (test-assert (session-close #:tag (unique-tag)))
+  (test-group "high level API"
+    (test-assert (blocklist-update #:tag (unique-tag)))
+    (test-assert (free-space "/some/phony/path/" #:tag (unique-tag)))
+    (test-assert (port-test #:tag (unique-tag)))
+    (test-group-3.1/4.6 queue-move-bottom queue-move-bottom/test)
+    (test-group-3.1/4.6 queue-move-down queue-move-down/test)
+    (test-group-3.1/4.6 queue-move-top queue-move-top/test)
+    (test-group-3.1/4.6 queue-move-up queue-move-up/test)
+    (test-assert (session-close #:tag (unique-tag)))
 
-  (test-group "session-get"
-    (test-assert (session-get #:tag (unique-tag)))
-    (test-assert (session-get #:fields '("encryption") #:tag (unique-tag))))
+    (test-group "session-get"
+      (test-assert (session-get #:tag (unique-tag)))
+      (test-assert (session-get #:fields '("encryption") #:tag (unique-tag))))
 
-  ; TODO: Test the different key parameters. This is bugging me... I can't
-  ;       think of a good way to do it.
-  (test-assert (session-set #:tag (unique-tag)))
+    ; TODO: Test the different key parameters. This is bugging me... I can't
+    ;       think of a good way to do it.
+    (test-assert (session-set #:tag (unique-tag)))
 
-  (test-assert (session-stats #:tag (unique-tag)))
+    (test-assert (session-stats #:tag (unique-tag)))
 
-  ; TODO: Test the different key parameters. This is bugging me... I can't
-  ;       think of a good way to do it.
-  (test-group "torrent-add"
-    (test-assert (torrent-add (torrent-source/filename "/some/phony/path/to/file.torrent") #:tag (unique-tag)))
-    (test-assert (torrent-add (torrent-source/metainfo "c29tZSBwaG9ueSB0b3JyZW50IGZpbGUK") #:tag (unique-tag))))
+    ; TODO: Test the different key parameters. This is bugging me... I can't
+    ;       think of a good way to do it.
+    (test-group "torrent-add"
+      (test-assert (torrent-add (torrent-source/filename "/some/phony/path/to/file.torrent") #:tag (unique-tag)))
+      (test-assert (torrent-add (torrent-source/metainfo "c29tZSBwaG9ueSB0b3JyZW50IGZpbGUK") #:tag (unique-tag))))
 
-  (test-group "torrent-get"
-    (let ((torrent-get/test
-            (lambda (#!optional (ids 'none))
-              (apply torrent-get '("id") #:tag (unique-tag)
-                     (if (eq? ids 'none) '() `(#:ids ,ids))))))
-      (test-ids torrent-get/test)))
-  (test-group-3.1/4.6 torrent-reannounce torrent-reannounce/test)
+    (test-group "torrent-get"
+      (let ((torrent-get/test
+              (lambda (#!optional (ids 'none))
+                (apply torrent-get '("id") #:tag (unique-tag)
+                       (if (eq? ids 'none) '() `(#:ids ,ids))))))
+        (test-ids torrent-get/test)))
+    (test-group-3.1/4.6 torrent-reannounce torrent-reannounce/test)
 
-  (test-group "torrent-remove"
-    (let ((torrent-remove/test
-            (lambda (#!optional (ids 'none))
-              (apply torrent-remove #:tag (unique-tag)
-                     (if (eq? ids 'none) '() `(#:ids ,ids))))))
-      (test-ids torrent-remove/test)))
+    (test-group "torrent-remove"
+      (let ((torrent-remove/test
+              (lambda (#!optional (ids 'none))
+                (apply torrent-remove #:tag (unique-tag)
+                       (if (eq? ids 'none) '() `(#:ids ,ids))))))
+        (test-ids torrent-remove/test)))
 
-  (test-group "torrent-rename-path"
-    (let ((torrent-rename-path/test
-            (lambda (#!optional (ids 'none))
-              (apply torrent-rename-path
-                     "/some/phony/path/"
-                     "/some/other/phony/path/"
-                     #:tag (unique-tag)
-                     (if (eq? ids 'none) '() `(#:ids ,ids))))))
-      (test-ids torrent-rename-path/test #t #f)))
+    (test-group "torrent-rename-path"
+      (let ((torrent-rename-path/test
+              (lambda (#!optional (ids 'none))
+                (apply torrent-rename-path
+                       "/some/phony/path/"
+                       "/some/other/phony/path/"
+                       #:tag (unique-tag)
+                       (if (eq? ids 'none) '() `(#:ids ,ids))))))
+        (test-ids torrent-rename-path/test #t #f)))
 
-  ; TODO: Test the different key parameters. This is bugging me... I can't
-  ;       think of a good way to do it.
-  (test-assert (torrent-set #:tag (unique-tag)))
+    ; TODO: Test the different key parameters. This is bugging me... I can't
+    ;       think of a good way to do it.
+    (test-assert (torrent-set #:tag (unique-tag)))
 
-  (test-group "torrent-set-location"
-    (let ((torrent-set-location/test
-            (lambda (#!optional (ids 'none))
-              (apply torrent-set-location "/some/phony/path/"
-                     #:tag (unique-tag)
-                     (if (eq? ids 'none) '() `(#:ids ,ids))))))
-      (test-ids torrent-set-location/test #t #f)))
+    (test-group "torrent-set-location"
+      (let ((torrent-set-location/test
+              (lambda (#!optional (ids 'none))
+                (apply torrent-set-location "/some/phony/path/"
+                       #:tag (unique-tag)
+                       (if (eq? ids 'none) '() `(#:ids ,ids))))))
+        (test-ids torrent-set-location/test #t #f)))
 
-  (test-group-3.1/4.6 torrent-start torrent-start/test)
-  (test-group-3.1/4.6 torrent-start-now torrent-start-now/test)
-  (test-group-3.1/4.6 torrent-stop torrent-stop/test)
-  (test-group-3.1/4.6 torrent-verify torrent-verify/test))
+    (test-group-3.1/4.6 torrent-start torrent-start/test)
+    (test-group-3.1/4.6 torrent-start-now torrent-start-now/test)
+    (test-group-3.1/4.6 torrent-stop torrent-stop/test)
+    (test-group-3.1/4.6 torrent-verify torrent-verify/test))
+
+  (test-group "`reply`"
+    (define (make-reply result arguments tag)
+      `((result . ,result) (arguments . ,arguments) (tag . ,tag)))
+    (define success-reply (make-reply "success" 'args #t))
+    (define error-reply (make-reply "error" 'args #t))
+
+    (test-assert (fixnum? (unique-tag)))
+
+    (test-group "reply-success?"
+      (test-assert (not (reply-success? error-reply)))
+      (test-assert (reply-success? success-reply)))
+
+    (test-group "reply-tag"
+      (test-assert (reply-tag error-reply))
+      (test-assert (reply-tag success-reply)))
+
+    (test-group "reply-arguments"
+      (test 'args (reply-arguments error-reply))
+      (test 'args (reply-arguments success-reply)))))
 
 (test-group "transmission.utils"
-  (define success-reply '((result . "success") (arguments . args) (tag . #t)))
-  (define error-reply '((result . "error") (arguments . args) (tag . #t)))
-
-  (test-assert (fixnum? (unique-tag)))
-
-  (test-group "reply-success?"
-    (test-assert (not (reply-success? error-reply)))
-    (test-assert (reply-success? success-reply)))
-
-  (test-group "reply-tag"
-    (test-assert (reply-tag error-reply))
-    (test-assert (reply-tag success-reply)))
-
-  (test-group "reply-arguments"
-    (test 'args (reply-arguments error-reply))
-    (test 'args (reply-arguments success-reply))))
+  )
 
 (test-exit)

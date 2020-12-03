@@ -1,5 +1,4 @@
-(module
-  transmission
+(module transmission
   (
    *host*
    *password*
@@ -10,6 +9,23 @@
 
    deserialize-message
    serialize-message
+
+   reply-arguments
+   reply-ref
+   reply-result
+   reply-success?
+   reply-tag
+
+   exception->result
+   result-ref
+   result-ref*
+   result/error
+   result/error-ref
+   result/error?
+   result/ok
+   result/ok-ref
+   result/ok?
+   result?
 
    handle-409
    http-call
@@ -37,9 +53,11 @@
   (import
     scheme
     (only chicken.base
+          alist-ref
           and-let*
           assert
           compose
+          constantly
           cute
           declare
           define-constant
@@ -61,7 +79,7 @@
     (only http-client
           with-input-from-request)
     (only intarweb
-          header-values
+          header-value
           headers
           make-request
           response-code
@@ -87,11 +105,41 @@
   ;       inlining inside of the module, which is what we need, and
   ;       `inline-global` is supposed to control inlining across modules; but
   ;       they both seem to do the job for the tests.
+  ; @see https://wiki.call-cc.org/man/5/Declarations#inline
   (declare
-    ; https://wiki.call-cc.org/man/5/Declarations#inline
     (not inline
          http-call
          make-serialized-message))
+
+  (import
+    (rename
+      (only srfi-189
+            either-ref
+            either?
+            exception->either
+            left
+            left?
+            right
+            right?)
+      (either-ref        result-ref)
+      (either?           result?)
+      (exception->either exception->result)
+      (left              result/error)
+      (left?             result/error?)
+      (right             result/ok)
+      (right?            result/ok?)))
+
+  (define false (constantly #f))
+  (define true  (constantly #t))
+
+  (define (result-ref* result)
+    (result-ref result values values))
+
+  (define (result/error-ref result #!optional (fail false))
+    (result-ref result values fail))
+
+  (define (result/ok-ref result #!optional (fail false))
+    (result-ref result fail values))
 
   (define ((assert* loc type type?) x)
     (assert
@@ -104,6 +152,17 @@
 
   (define ((or? . rest) x)
     (any (cute <> x) rest))
+
+  (define reply-ref alist-ref)
+  (define (reply-result reply)    (reply-ref 'result reply))
+  (define (reply-arguments reply) (reply-ref 'arguments reply))
+  (define (reply-tag reply)       (reply-ref 'tag reply))
+
+  (define (reply-result-success? result)
+    (and (string? result) (string=? result "success")))
+
+  (define (reply-success? reply)
+    (and reply (reply-result-success? (reply-result reply))))
 
   ;;;
   ;;; RPC Parameters
@@ -206,20 +265,17 @@
     (let ((response (get-condition-property condition 'client-error 'response)))
 
       ; See 2.3.1 for how to handle 409
-      (cond
+      ; The condition object may not have a response property, in which
+      ;   case, it is not a 409
+      (if (and response (= (response-code response) 409))
 
-        ; The condition object may not have a response property, in which
-        ;   case, it is not a 409
-        ((and response
-              (= (response-code response) 409))
-         (let ((session-id (car (header-values 'x-transmission-session-id (response-headers response)))))
-           (*session-id* session-id)
-           (let ((req (update-request-session-id request session-id)))
-             (http-call req message))))
+          (let ((session-id (header-value 'x-transmission-session-id (response-headers response) "")))
+            (*session-id* session-id)
+            (let ((req (update-request-session-id request session-id)))
+              (http-call req message)))
 
-        ; Rethrow any other errors
-        (else
-          (signal condition)))))
+          ; Rethrow any other errors
+          (signal condition))))
 
   ;; @brief Make an RPC call to a Transmission daemon.
   ;; @param method A string naming an RPC method.
@@ -242,10 +298,21 @@
     (define (call host url port username password method arguments tag)
       (let ((req (make-rpc-request host url port username password))
             (message (make-serialized-message method arguments tag)))
-        (condition-case
-          (http-call req message)
-          (condition (exn http client-error) ; 409 is in this condition kind
-                     (handle-409 condition req message)))))
+        (result-ref
+          (exception->result
+            true
+            (lambda ()
+              (condition-case (http-call req message)
+                (condition (exn http client-error) ; 409 is in this condition kind
+                           (handle-409 condition req message)))))
+          result/error
+          ; @param reply The Transmission daemon's reply message.
+          ; @param req The URI-common request object.
+          ; @param resp An intarweb#response object.
+          (lambda (reply req resp)
+            (if (reply-success? reply)
+                (result/ok (reply-arguments reply) (reply-tag reply) req resp)
+                (result/error (reply-result reply) (reply-tag reply) req resp))))))
 
     (define (!xor a b) (or (and a b) (not (or a b))))
     (and-let*
@@ -269,11 +336,11 @@
   ; TODO: Take a look at SRFI-189.
   (define-constant just-sym (gensym 'just))
   (define-constant nothing  (gensym 'nothing))
-  (define (just x)     `(,just-sym . ,x))
-  (define (just? x)    (and (pair? x) (eq? (car x) just-sym)))
-  (define (nothing? x) (eq? x nothing))
-  (define (maybe? x)   (or (nothing? x) (just? x)))
-  (define (unwrap x)   (cdr x))
+  (define (just obj)     `(,just-sym . ,obj))
+  (define (just? obj)    (and (pair? obj) (eq? (car obj) just-sym)))
+  (define (nothing? obj) (eq? obj nothing))
+  (define (maybe? obj)   ((or? nothing? just?) obj))
+  (define (unwrap just)  (cdr just))
 
   (define (->maybe b)
     (cond (((or? false? nothing?) b) nothing)
@@ -282,7 +349,10 @@
 
   ;; maybe :: (a -> Maybe b) -> Maybe a -> Maybe b
   (define (maybe f x)
-    (if (just? x) (f (unwrap x)) nothing))
+    (cond
+      ((just? x) (f (unwrap x)))
+      ((nothing? x) nothing)
+      (else (f x))))
 
   ;; maybe-map :: (a -> b) -> Maybe a -> Maybe b
   (define (maybe-map f x)

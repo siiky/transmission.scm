@@ -9,6 +9,7 @@
    intarweb
    medea
    srfi-1
+   srfi-189
    uri-common
    vector-lib)
  (test-dependencies
@@ -26,4 +27,5 @@
    (extension transmission.utils
               (types-file)
               (modules transmission.utils)
-              (source transmission.utils.scm))))
+              (source transmission.utils.scm)
+              (component-dependencies transmission))))

@@ -1,15 +1,10 @@
 (module
   transmission.utils
   (
-   reply-arguments
-   reply-ref
    reply-ref-path
-   reply-result
-   reply-success?
-   reply-tag
 
    default-error-proc
-   with-transmission-reply
+   with-transmission-result
 
    status/check
    status/check-wait
@@ -33,7 +28,6 @@
     vector-lib
     (only chicken.base
           add1
-          alist-ref
           cute
           error
           fixnum?))
@@ -44,6 +38,11 @@
           member)
     (only vector-lib
           vector-map))
+
+  (import
+    (only transmission
+          reply-ref
+          result-ref))
 
   ; This seems to work even without importing SRFI-42, which is awesome.
   (define-syntax :treply
@@ -86,23 +85,6 @@
   (define (alist-keep-keys alist . keys)
     (filter (lambda (kv) (member (car kv) keys eq?)) alist))
 
-  (define reply-ref alist-ref)
-
-  (define (reply-result reply)
-    (reply-ref 'result reply))
-
-  (define (reply-arguments reply)
-    (reply-ref 'arguments reply))
-
-  (define (reply-tag reply)
-    (reply-ref 'tag reply))
-
-  (define (reply-result-success? result)
-    (and (string? result) (string=? result "success")))
-
-  (define (reply-success? reply)
-    (and reply (reply-result-success? (reply-result reply))))
-
   (define (reply-ref-path reply path #!optional (==? equal?))
     (cond
       ((null? path)
@@ -128,7 +110,8 @@
   (define status/seed-wait     5)
   (define status/seed          6)
 
-  (define (default-error-proc result tag)
+  ; TODO: API calls can fail with an exception; handle that too.
+  (define (default-error-proc result tag req resp)
     (let ((msg (string-append
                  "RPC call "
                  (if (fixnum? tag)
@@ -137,13 +120,8 @@
                  " failed with the following error")))
       (error 'default-error-proc msg result)))
 
-  ; TODO: Take a look at SRFI-189.
-  (define (with-transmission-reply reply success-proc #!key (error-proc default-error-proc) (tag #f))
-    (let ((result (and reply (reply-result reply)))
-          (tag (and (fixnum? tag) tag))
-          (rtag (and tag reply (reply-tag reply))))
-      (if (and (eq? tag rtag)
-               (reply-result-success? result))
-          (success-proc (reply-arguments reply))
-          (error-proc result rtag))))
+  ; NOTE: The same as result-ref, except the success and failure procedures are
+  ;       flipped.
+  (define (with-transmission-result result success-proc #!optional (error-proc default-error-proc))
+    (result-ref result error-proc success-proc))
   )

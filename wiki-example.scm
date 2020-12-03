@@ -4,9 +4,9 @@
                (*username* "username")
                (*password* "password"))
   (let ((tag (unique-tag)))
-    (with-transmission-reply
+    (with-transmission-result
       (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f #:tag tag)
-      (lambda (arguments)
+      (lambda (arguments tag req resp)
         (define (want-torrent? tor)
           (alist-let/and tor (downloadDir status uploadRatio)
                          (and (= status status/seed)
@@ -15,7 +15,5 @@
         (alist-let/and arguments (torrents)
                        (let ((wanted-tors (filter want-torrent?  (vector->list torrents))))
                          (for-each print wanted-tors))))
-      #:error-proc
-      (lambda (result tag)
-        (error 'here "torrent-get call failed with the following error" result))
-      #:tag tag)))
+      (lambda (result tag req resp)
+        (error 'here "torrent-get call failed with the following error" result)))))
