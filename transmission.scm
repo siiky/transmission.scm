@@ -46,8 +46,9 @@
    torrent-source/metainfo?
    torrent-source?
 
-   id?
    format?
+   id?
+   ids?
    )
 
   (import
@@ -407,6 +408,11 @@
         (and (string? id)
              (or (= (string-length id) 40) ; SHA1
                  (string=? id "recently-active")))))
+
+  (define (ids? ids)
+    (or (id? ids)
+        (and (list? ids) (every id? ids))
+        (and (vector? ids) (every id? (vector->list ids)))))
 
   ;; @brief Pre-process a list of IDs.
   ;; @param ids A list of IDs.

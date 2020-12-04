@@ -14,6 +14,10 @@
    status/seed-wait
    status/stopped
 
+   priority/high
+   priority/low
+   priority/normal
+
    alist-keep-keys
    unique-tag
 
@@ -50,26 +54,41 @@
       ((:treply cc var reply key ...)
        (:vector cc var (reply-ref-path (reply-arguments reply) '(key ...))))))
 
+  (define-syntax alist-let-aux
+    (syntax-rules ()
+      ((alist-let-aux "rec" ret alist)
+       ret)
+
+      ((alist-let-aux "rec" ret alist (variable-name key) . rest)
+       (alist-let-aux "rec" ((variable-name  (alist-ref 'key alist)) . ret) rest))
+
+      ((alist-let-aux "rec" ret alist key . rest)
+       (alist-let-aux "rec" ((key  (alist-ref 'key alist)) . ret) rest))
+
+      ((alist-let-aux alist key ...)
+       (alist-let-aux "rec" () alist key ...))))
+
   (define-syntax alist-let/and
     (syntax-rules ()
       ((alist-let/and alist (key ...)
                       body ...)
-       (and alist
-            (let ((key (alist-ref 'key alist))
-                  ...)
-              body
-              ...)))))
+       (let ((%alist alist))
+         (and %alist
+              ; TODO: Why doesn't this work?
+              ;(let (alist-let-aux %alist key ...)
+              (let ((key (alist-ref 'key %alist)) ...)
+                body
+                ...))))))
 
   (define-syntax alist-let/nor
     (syntax-rules ()
       ((alist-let/nor alist (key ...)
                       body ...)
-       (or (not alist)
-           (let ((key (alist-ref 'key alist))
-                 ...)
-             body
-             ...)))))
-
+       (let ((%alist alist))
+         (or (not %alist)
+             (let ((key (alist-ref 'key %alist)) ...)
+               body
+               ...))))))
 
   (define unique-tag
     (let ((n 0))
@@ -109,6 +128,11 @@
   (define status/download      4)
   (define status/seed-wait     5)
   (define status/seed          6)
+
+  ;; tr_priority_t from libtransmission/transmission.h
+  (define priority/low -1)   ; TR_PRI_LOW
+  (define priority/normal 0) ; TR_PRI_NORMAL
+  (define priority/high 1)   ; TR_PRI_HIGH
 
   ; TODO: API calls can fail with an exception; handle that too.
   (define (default-error-proc result tag req resp)
