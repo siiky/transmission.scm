@@ -1,10 +1,6 @@
-(module
-  transmission.utils
+(module transmission.utils
   (
    reply-ref-path
-
-   default-error-proc
-   with-transmission-result
 
    status/check
    status/check-wait
@@ -19,7 +15,7 @@
    priority/normal
 
    alist-keep-keys
-   unique-tag
+   unique-tag!
 
    alist-let/and
    alist-let/nor
@@ -31,7 +27,6 @@
     (only chicken.base
           add1
           cute
-          error
           fixnum?))
 
   (import
@@ -46,69 +41,95 @@
           reply-ref
           result-ref))
 
-  ; TODO: Is there a way to extract the common parts of `alist-let/and` and
-  ;       `alist-let/nor`? Tried creating an auxiliary macro, but it wasn't
-  ;       expanded when used inside of these two, and I don't understand why.
+  ; NOTE(alist-let):
+  ;
+  ; The common part, of both `alist-let/and` and `alist-let/nor`, of expanding
+  ; the "let-list", is now in `alist-let`. With the "normal entry point" for
+  ; `alist-let`, `alist-let/and` and `alist-let/nor` would result in a double
+  ; unnecessary `let`; e.g.
+  ;
+  ; (alist-let/and alist (k1 k2) (print k1 k2))
+  ;
+  ; ==>
+  ;
+  ; (let ((%alist alist))
+  ;   (and %alist
+  ;        (alist-let %alist (k1 k2) (print k1 k2))))
+  ;
+  ; ==>
+  ;
+  ; (let ((%alist alist))
+  ;   (and %alist
+  ;        (let ((%alist %alist))
+  ;          (let ((k1 (alist-ref 'k1 %alist))
+  ;                (k2 (alist-ref 'k2 %alist)))
+  ;            (print k1 k2)))))
+  ;
+  ; To avoid this, both of them use one of the internal "states" ("rec") of
+  ; `alist-let`.
+  ;
+  ; That same expression now expands to
+  ;
+  ; (let ((%alist alist))
+  ;   (and %alist
+  ;        (let ((k1 (alist-ref 'k1 %alist))
+  ;              (k2 (alist-ref 'k2 %alist)))
+  ;          (print k1 k2))))
+  ;
+  ; which is the same as what the original `alist-let/and` expanded to.
+
+  (define-syntax alist-let
+    (syntax-rules ()
+      ((alist-let "rec" let-list alist () body ...)
+       (let let-list
+         body ...))
+
+      ((alist-let "rec" let-list
+                  alist ((variable-name key) . let-tail)
+                  body ...)
+       (alist-let "rec" ((variable-name (reply-ref 'key alist)) . let-list)
+                  alist let-tail
+                  body ...))
+
+      ((alist-let "rec" let-list
+                  alist (key . let-tail)
+                  body ...)
+       (alist-let "rec" ((key (reply-ref 'key alist)) . let-list)
+                  alist let-tail
+                  body ...))
+
+      ((alist-let alist (key ...)
+                  body ...)
+       (let ((%alist alist))
+         (alist-let "rec" ()
+                    %alist (key ...)
+                    body ...)))))
+
+
 
   (define-syntax alist-let/and
     (syntax-rules ()
-      ((alist-let/and "rec" let-list alist () body ...)
-       (let let-list
-         body ...))
-
-      ((alist-let/and "rec" let-list
-                      alist ((variable-name key) . let-tail)
-                      body ...)
-       (alist-let/and "rec" ((variable-name (alist-ref 'key alist)) . let-list)
-                      alist let-tail body ...))
-
-      ((alist-let/and "rec" let-list
-                      alist (key . let-tail)
-                      body ...)
-       (alist-let/and "rec" ((key (alist-ref 'key alist)) . let-list)
-                      alist let-tail body ...))
-
-      ((alist-let/and alist (key ...)
-                      body ...)
+      ((alist-let/and alist (key ...) body ...)
        (let ((%alist alist))
          (and %alist
-              (alist-let/and "rec" ()
-                             %alist (key ...)
-                             body ...))))))
+              ; NOTE: See NOTE(alist-let) above.
+              (alist-let "rec" () %alist (key ...) body ...))))))
 
   (define-syntax alist-let/nor
     (syntax-rules ()
-      ((alist-let/nor "rec" let-list alist () body ...)
-       (let let-list
-         body ...))
-
-      ((alist-let/nor "rec" let-list
-                      alist ((variable-name key) . let-tail)
-                      body ...)
-       (alist-let/nor "rec" ((variable-name (alist-ref 'key alist)) . let-list)
-                      alist let-tail body ...))
-
-      ((alist-let/nor "rec" let-list
-                      alist (key . let-tail)
-                      body ...)
-       (alist-let/nor "rec" ((key (alist-ref 'key alist)) . let-list)
-                      alist let-tail body ...))
-
-      ((alist-let/nor alist (key ...)
-                      body ...)
+      ((alist-let/nor alist (key ...) body ...)
        (let ((%alist alist))
          (or (not %alist)
-             (alist-let/nor "rec" ()
-                            %alist (key ...)
-                            body ...))))))
+             ; NOTE: See NOTE(alist-let) above.
+             (alist-let "rec" () %alist (key ...) body ...))))))
 
-  (define unique-tag
+  (define unique-tag!
     (let ((n 0))
       (lambda (#!optional (new-n #f))
         (if (fixnum? new-n)
             (begin
               (set! n new-n)
-              (unique-tag))
+              (unique-tag!))
             (let ((ret n))
               (set! n (add1 n))
               ret)))))
@@ -145,19 +166,4 @@
   (define priority/low   -1) ; TR_PRI_LOW
   (define priority/normal 0) ; TR_PRI_NORMAL
   (define priority/high   1) ; TR_PRI_HIGH
-
-  ; TODO: API calls can fail with an exception; handle that too.
-  (define (default-error-proc result tag req resp)
-    (let ((msg (string-append
-                 "RPC call "
-                 (if (fixnum? tag)
-                     (string-append "with tag " (number->string tag))
-                     "")
-                 " failed with the following error")))
-      (error 'default-error-proc msg result)))
-
-  ; NOTE: The same as result-ref, except the success and failure procedures are
-  ;       flipped.
-  (define (with-transmission-result result success-proc #!optional (error-proc default-error-proc))
-    (result-ref result error-proc success-proc))
   )

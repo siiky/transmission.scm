@@ -16,7 +16,9 @@
    reply-success?
    reply-tag
 
+   default-error-proc
    exception->result
+   result-bind
    result-ref
    result-ref*
    result/error
@@ -26,6 +28,7 @@
    result/ok-ref
    result/ok?
    result?
+   with-transmission-result
 
    handle-409
    http-call
@@ -62,6 +65,7 @@
           cute
           declare
           define-constant
+          error
           fixnum?
           gensym
           identity
@@ -115,6 +119,7 @@
   (import
     (rename
       (only srfi-189
+            either-bind
             either-ref
             either?
             exception->either
@@ -122,6 +127,7 @@
             left?
             right
             right?)
+      (either-bind       result-bind)
       (either-ref        result-ref)
       (either?           result?)
       (exception->either exception->result)
@@ -141,6 +147,21 @@
 
   (define (result/ok-ref result #!optional (fail false))
     (result-ref result fail values))
+
+  ; TODO: API calls can fail with an exception; handle that too.
+  (define (default-error-proc result tag req resp)
+    (let ((msg (string-append
+                 "RPC call "
+                 (if (fixnum? tag)
+                     (string-append "with tag " (number->string tag))
+                     "")
+                 " failed with the following error")))
+      (error 'default-error-proc msg result)))
+
+  ; NOTE: The same as result-ref, except the success and failure procedures are
+  ;       flipped.
+  (define (with-transmission-result result success-proc #!optional (error-proc default-error-proc))
+    (result-ref result error-proc success-proc))
 
   (define ((assert* loc type type?) x)
     (assert

@@ -24,9 +24,10 @@ The following eggs are required for using this egg:
 * [[http-client]]
 * [[intarweb]]
 * [[medea]]
+* [[r7rs]]
 * [[srfi-1]]
+* [[srfi-189]]
 * [[uri-common]]
-* [[vector-lib]]
 
 The following eggs are required for testing this egg:
 
@@ -49,11 +50,11 @@ The following eggs are required for testing this egg:
 ===== High-level RPC API
 
 Every method of the spec is defined, and naming is followed almost directly. In
-the spec, all methods and most arguments follow {{kebab-case}}. The exceptions
-are a few arguments in {{camelCase}} -- these are converted to {{kebab-case}}
-in this egg: e.g., the key argument for {{queuePosition}} is called
-{{queue-position}}. Note, however, that the messages are left untouched: a
-message to/from the server will still use {{queuePosition}} as the key,
+the spec, all methods and most arguments follow the {{kebab-case}} convention.
+The exceptions are a few arguments in {{camelCase}} -- these are converted to
+{{kebab-case}} in this egg: e.g., the key argument for {{queuePosition}} is
+called {{queue-position}}. Note, however, that the messages are left untouched:
+a message to/from the server will still use {{queuePosition}} as the key,
 '''NOT''' {{queue-position}}.
 
 Almost all required parameters are positional arguments in the library -- the
@@ -74,7 +75,82 @@ Base64.
 {{torrent-source/filename}} is used for magnets and file paths;
 {{torrent-source/metainfo}} is used for Base64 encoded torrent files.
 
+====== Results
+
+Every API procedure returns a {{result}}, which is a SRFI-189 {{Either}}
+object. The most useful and most commonly used procedures for handling results
+are renamed and exported. On top of these, some others are defined.
+
+<procedure>(true . _)</procedure>
+<procedure>(false . _)</procedure>
+
+{{true}} and {{false}} return {{#t}} and {{#f}} respectively, independently of
+the arguments they're called with.
+
+<procedure>(result/error obj ...)</procedure>
+<procedure>(result/error? obj)</procedure>
+<procedure>(result/ok obj ...)</procedure>
+<procedure>(result/ok? obj)</procedure>
+<procedure>(result? obj)</procedure>
+<procedure>(result-bind result mproc1 mproc2 ...)</procedure>
+<procedure>(result-ref result failure [success])</procedure>
+<procedure>(exception->result pred thunk)</procedure>
+
+Renames of SRFI-189. The {{result/error}} related functions are the {{left}}
+related functions from SRFI-189; and the {{result/ok}} related functions are
+the {{right}} related functions from SRFI-189.
+
+<procedure>(result/error-ref result #!optional (fail false))</procedure>
+<procedure>(result/ok-ref result #!optional (fail false))</procedure>
+
+If the object is of the expected alternative ({{result/error}} or
+{{result/ok}}), return the values contained in it; otherwise, call {{fail}} on
+the values contained in the object, which by default, returns {{#f}}.
+
+<procedure>(result-ref* result)</procedure>
+
+Return the values contained in a result object, whether it's a {{result/error}}
+or {{result/ok}}.
+
+<procedure>(default-error-proc result tag req resp)</procedure>
+<procedure>(with-transmission-result result success-proc #!optional (error-proc default-error-proc))</procedure>
+
+Convenient way to handle a single RPC call's result.
+
+{{with-transmission-result}} is similar to {{result-ref}} ({{either-ref}} from
+SRFI-189)), except that the order of the success and failure procedures is
+swapped. The failure procedure defaults to {{default-error-proc}}, which calls
+{{error}} with a generic error message.
+
+{{success-proc}} should be a procedure of 4 parameters: the {{arguments}} and
+{{tag}} fields of a reply message, the {{uri-common}} request object, and the
+{{intarweb}} response object.
+
+{{failure-proc}} should be a procedure that accepts 1 or 4 parameters: if only
+one argument is given, it is a condition; if 4 arguments are given, they are
+the {{result}} and {{tag}} fields of a reply message, the {{uri-common}}
+request object, and the {{intarweb}} response object.
+
 ===== Low-level API
+
+<macro>(make-rpc-call (method (required required-handler) ...) (key default key-handler) ...)</macro>
+<macro>(make-rpc-call method (key default key-handler) ...)</macro>
+<macro>(define-rpc-call (method required ...) key ...)</macro>
+<macro>(define-rpc-call method key ...)</macro>
+<macro>(export-rpc-call (method required ...) key ...)</macro>
+<macro>(export-rpc-call method key ...)</macro>
+<macro>(export-3.1/4.6 method)</macro>
+
+{{make-rpc-call}} creates a procedure to represent an RPC method.
+
+{{define-rpc-call}} is like {{make-rpc-call}} but defines the created
+procedure.
+
+{{export-rpc-call}} is like {{define-rpc-call}} but exports the defined
+procedure.
+
+{{export-3.1/4.6}} exports RPC procedures of sections 3.1 and 4.6 of the spec,
+which have a single optional {{ids}} argument.
 
 {{method}} is a method name, which will be used as the method name in messages
 and, in the case of {{define-rpc-call}}, {{export-rpc-call}}, and
@@ -84,33 +160,14 @@ and, in the case of {{define-rpc-call}}, {{export-rpc-call}}, and
 messages.
 
 {{key}} is the name of an optional (key) argument. It will be used as the key
-name in the created procedure.
+name in the created procedure, but not in messages.
 
 {{required-handler}} and {{key-handler}} are functions that will process a
 given value, to assure it has the right type/format, and return an entry ready
-to be inserted into the {{arguments}} object of a message.
+to be inserted into the {{arguments}} object of a message, i.e., they must return
+a {{(key . value)}} pair that will later be converted to JSON.
 
 {{default}} is the default value of an optional (key) argument.
-
-<macro>(make-rpc-call (method (required required-handler) ...) (key default key-handler) ...)</macro>
-<macro>(make-rpc-call method (key default key-handler) ...)</macro>
-
-Create a procedure to represent an RPC method.
-
-<macro>(define-rpc-call (method required ...) key ...)</macro>
-<macro>(define-rpc-call method key ...)</macro>
-
-Like {{make-rpc-call}} but defines the created procedure.
-
-<macro>(export-rpc-call (method required ...) key ...)</macro>
-<macro>(export-rpc-call method key ...)</macro>
-
-Like {{define-rpc-call}} but exports the defined procedure.
-
-<macro>(export-3.1/4.6 method)</macro>
-
-Export RPC procedures of sections 3.1 and 4.6 of the spec, which have a single
-optional {{ids}} argument.
 
 <procedure>(rpc-call method #!key (arguments #f) (tag #f))</procedure>
 
@@ -126,6 +183,7 @@ is the {{arguments}} object, containing both required and optional arguments.
 
 ==== {{transmission.utils}} module
 
+<syntax>(alist-let alist (key ...) body ...)</syntax>
 <syntax>(alist-let/and alist (key ...) body ...)</syntax>
 <syntax>(alist-let/nor alist (key ...) body ...)</syntax>
 
@@ -142,27 +200,11 @@ Except that, with {{alist-let/and}}, if {{alist}} is false, the value of the
 whole expression is false; and with {{alist-let/nor}}, if {{alist}} is false,
 the value of the whole expression is true.
 
-<procedure>(unique-tag #!optional (new-n #f))</procedure>
+<procedure>(unique-tag! #!optional (new-n #f))</procedure>
 
 Return an unique tag, that starts at 0 and is incremented by 1 on each call. If
 {{new-n}} is given and is a {{fixnum?}}, set the internal variable to {{new-n}}
 for future use.
-
-<procedure>(reply-result reply)</procedure>
-
-Return the {{result}} value of a reply.
-
-<procedure>(reply-arguments reply)</procedure>
-
-Return the {{arguments}} value of a reply.
-
-<procedure>(reply-tag reply)</procedure>
-
-Return the {{tag}} value of a reply.
-
-<procedure>(reply-success? reply)</procedure>
-
-Return {{#t}} if the {{result}} value is {{"success"}}, {{#f}} otherwise.
 
 <constant>status/stopped</constant>
 <constant>status/check-wait</constant>
@@ -172,22 +214,13 @@ Return {{#t}} if the {{result}} value is {{"success"}}, {{#f}} otherwise.
 <constant>status/seed-wait</constant>
 <constant>status/seed</constant>
 
-The torrent status.
+The torrent status constants.
 
-<procedure>(default-error-proc result tag)</procedure>
-<procedure>(with-transmission-reply reply success-proc #!key (error-proc default-error-proc) (tag #f))</procedure>
+<constant>priority/low</constant>
+<constant>priority/normal</constant>
+<constant>priority/high</constant>
 
-Convenient way to handle an RPC call's reply.
-
-{{reply}} is the return value of an RPC call; {{success-proc}} is an unary
-procedure that will be called with the reply's {{arguments}} object, in case of
-success; {{error-proc}} is a binary procedure (defaulting to
-{{default-error-proc}}) that will be called with the reply's {{result}} and
-{{tag}} values, in case of error; if {{tag}} is given and is a {{fixnum?}},
-then {{with-transmission-reply}} checks that it is the same as the reply's
-{{tag}}.
-
-{{default-error-proc}} simply calls {{error}} with the given parameters.
+The priority constants -- for {{bandwidth-priority}}.
 
 === Examples
 
@@ -197,22 +230,19 @@ then {{with-transmission-reply}} checks that it is the same as the reply's
 (parameterize ((*host* "hostname")
                (*username* "username")
                (*password* "password"))
-  (let ((tag (unique-tag)))
-    (with-transmission-reply
-      (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f #:tag tag)
-      (lambda (arguments)
-        (define (want-torrent? tor)
-          (alist-let/and tor (downloadDir status uploadRatio)
-                         (and (= status status/seed)
-                              (> uploadRatio 1)
-                              (string=? downloadDir "/some/path/"))))
-        (alist-let/and arguments (torrents)
-                       (let ((wanted-tors (filter want-torrent?  (vector->list torrents))))
-                         (for-each print wanted-tors))))
-      #:error-proc
-      (lambda (result tag)
-        (error 'here "torrent-get call failed with the following error" result))
-      #:tag tag)))
+  (with-transmission-result
+    (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f)
+    (lambda (arguments . _)
+      (define (want-torrent? tor)
+        (alist-let/and tor (downloadDir status uploadRatio)
+                       (and (= status status/seed)
+                            (> uploadRatio 1)
+                            (string=? downloadDir "/some/path/"))))
+      (alist-let/and arguments (torrents)
+                     (let ((wanted-tors (filter want-torrent? (vector->list torrents))))
+                       (for-each print wanted-tors))))
+    (lambda (result . _)
+      (error 'here "torrent-get call failed with the following error" result))))
 </enscript>
 
 === License
@@ -243,6 +273,22 @@ then {{with-transmission-reply}} checks that it is the same as the reply's
   For more information, please refer to <http://unlicense.org>
 
 === Version History
+
+==== 0.2.0 (2020/12/08)
+
+* Return a more functional {{result}} object from API calls instead of a more
+  C-like {{reply}} for easier error handling. There's no chance to mistake an
+  error for a good result now;
+
+* Improve {{alist-let/and}} and {{alist-let/nor}} to support optional variable
+  names;
+
+* Add {{priority}} constants;
+
+* Rename {{unique-tag}} to {{unique-tag!}};
+
+* Replace [[vector-lib]] with [[r7rs]] because [[srfi-189]] depends on it
+  anyway.
 
 ==== 0.1.1 (2020/12/02)
 
