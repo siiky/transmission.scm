@@ -8,10 +8,10 @@
    http-client
    intarweb
    medea
+   r7rs
    srfi-1
    srfi-189
-   uri-common
-   vector-lib)
+   uri-common)
  (test-dependencies
    srfi-1
    test)

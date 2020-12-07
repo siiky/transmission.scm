@@ -21,7 +21,6 @@
    alist-keep-keys
    unique-tag
 
-   :treply
    alist-let/and
    alist-let/nor
    )
@@ -29,7 +28,6 @@
   (import
     (except scheme
             member)
-    vector-lib
     (only chicken.base
           add1
           cute
@@ -40,7 +38,7 @@
     (only srfi-1
           filter
           member)
-    (only vector-lib
+    (only scheme.base
           vector-map))
 
   (import
@@ -48,47 +46,61 @@
           reply-ref
           result-ref))
 
-  ; This seems to work even without importing SRFI-42, which is awesome.
-  (define-syntax :treply
-    (syntax-rules ()
-      ((:treply cc var reply key ...)
-       (:vector cc var (reply-ref-path (reply-arguments reply) '(key ...))))))
-
-  (define-syntax alist-let-aux
-    (syntax-rules ()
-      ((alist-let-aux "rec" ret alist)
-       ret)
-
-      ((alist-let-aux "rec" ret alist (variable-name key) . rest)
-       (alist-let-aux "rec" ((variable-name  (alist-ref 'key alist)) . ret) rest))
-
-      ((alist-let-aux "rec" ret alist key . rest)
-       (alist-let-aux "rec" ((key  (alist-ref 'key alist)) . ret) rest))
-
-      ((alist-let-aux alist key ...)
-       (alist-let-aux "rec" () alist key ...))))
+  ; TODO: Is there a way to extract the common parts of `alist-let/and` and
+  ;       `alist-let/nor`? Tried creating an auxiliary macro, but it wasn't
+  ;       expanded when used inside of these two, and I don't understand why.
 
   (define-syntax alist-let/and
     (syntax-rules ()
+      ((alist-let/and "rec" let-list alist () body ...)
+       (let let-list
+         body ...))
+
+      ((alist-let/and "rec" let-list
+                      alist ((variable-name key) . let-tail)
+                      body ...)
+       (alist-let/and "rec" ((variable-name (alist-ref 'key alist)) . let-list)
+                      alist let-tail body ...))
+
+      ((alist-let/and "rec" let-list
+                      alist (key . let-tail)
+                      body ...)
+       (alist-let/and "rec" ((key (alist-ref 'key alist)) . let-list)
+                      alist let-tail body ...))
+
       ((alist-let/and alist (key ...)
                       body ...)
        (let ((%alist alist))
          (and %alist
-              ; TODO: Why doesn't this work?
-              ;(let (alist-let-aux %alist key ...)
-              (let ((key (alist-ref 'key %alist)) ...)
-                body
-                ...))))))
+              (alist-let/and "rec" ()
+                             %alist (key ...)
+                             body ...))))))
 
   (define-syntax alist-let/nor
     (syntax-rules ()
+      ((alist-let/nor "rec" let-list alist () body ...)
+       (let let-list
+         body ...))
+
+      ((alist-let/nor "rec" let-list
+                      alist ((variable-name key) . let-tail)
+                      body ...)
+       (alist-let/nor "rec" ((variable-name (alist-ref 'key alist)) . let-list)
+                      alist let-tail body ...))
+
+      ((alist-let/nor "rec" let-list
+                      alist (key . let-tail)
+                      body ...)
+       (alist-let/nor "rec" ((key (alist-ref 'key alist)) . let-list)
+                      alist let-tail body ...))
+
       ((alist-let/nor alist (key ...)
                       body ...)
        (let ((%alist alist))
          (or (not %alist)
-             (let ((key (alist-ref 'key %alist)) ...)
-               body
-               ...))))))
+             (alist-let/nor "rec" ()
+                            %alist (key ...)
+                            body ...))))))
 
   (define unique-tag
     (let ((n 0))
@@ -130,9 +142,9 @@
   (define status/seed          6)
 
   ;; tr_priority_t from libtransmission/transmission.h
-  (define priority/low -1)   ; TR_PRI_LOW
+  (define priority/low   -1) ; TR_PRI_LOW
   (define priority/normal 0) ; TR_PRI_NORMAL
-  (define priority/high 1)   ; TR_PRI_HIGH
+  (define priority/high   1) ; TR_PRI_HIGH
 
   ; TODO: API calls can fail with an exception; handle that too.
   (define (default-error-proc result tag req resp)

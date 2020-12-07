@@ -183,7 +183,7 @@
       ,(defhandler (torrent-add arguments tag)
                    (alist-let/and arguments
                                   (
-                                   bandwidth-priority
+                                   (bandwidth-priority bandwidthPriority)
                                    cookies
                                    download-dir
                                    filename
