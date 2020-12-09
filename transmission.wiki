@@ -274,7 +274,7 @@ The priority constants -- for {{bandwidth-priority}}.
 
 === Version History
 
-==== 0.2.0 (2020/12/08)
+==== 0.2.0 (2020/12/09)
 
 * Return a more functional {{result}} object from API calls instead of a more
   C-like {{reply}} for easier error handling. There's no chance to mistake an
