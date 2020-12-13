@@ -62,6 +62,7 @@
           assert
           compose
           constantly
+          current-error-port
           cute
           declare
           define-constant
@@ -74,9 +75,12 @@
     (only chicken.condition
           condition-case
           get-condition-property
+          print-error-message
           signal)
     (only chicken.module
           export)
+    (only chicken.port
+          with-output-to-port)
     (only chicken.string
           ->string))
 
@@ -148,15 +152,20 @@
   (define (result/ok-ref result #!optional (fail false))
     (result-ref result fail values))
 
-  ; TODO: API calls can fail with an exception; handle that too.
-  (define (default-error-proc result tag req resp)
-    (let ((msg (string-append
-                 "RPC call "
-                 (if (fixnum? tag)
-                     (string-append "with tag " (number->string tag))
-                     "")
-                 " failed with the following error")))
-      (error 'default-error-proc msg result)))
+  (define (default-error-proc result/con #!optional tag req resp)
+    (if req
+        (let ((msg (string-append
+                     "RPC call "
+                     (if (fixnum? tag)
+                         (string-append "with tag " (number->string tag))
+                         "")
+                     " failed with the following error")))
+          (error 'with-transmission-result msg result/con))
+
+        (with-output-to-port
+          (current-error-port)
+          (lambda ()
+            (print-error-message 'with-transmission-result result/con)))))
 
   ; NOTE: The same as result-ref, except the success and failure procedures are
   ;       flipped.
@@ -381,9 +390,10 @@
     (maybe (o just f) x))
 
   ;; For `torrent-add`
-  ; TODO: Take a look at SRFI-189.
   ; NOTE: The 'filename and 'metainfo symbols are important, do not change
   ;       them! They're used as the key in the arguments object.
+  ; NOTE: Using Either from SRFI-189 would involve more work than the current
+  ;       implementation.
   (define (torrent-source/filename str) (and (string? str) `(filename . ,str)))
   (define (torrent-source/metainfo str) (and (string? str) `(metainfo . ,str)))
   (define ((torrent-source-with-tag? tag) obj)

@@ -6,8 +6,33 @@
 
 === Description
 
-An egg to work with [[https://github.com/transmission/transmission|Transmission]]'s
-RPC. It assumes familiarity with the [[https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt|spec]].
+An egg to work with the
+[[https://github.com/transmission/transmission|Transmission]] (v3.01)
+[[https://github.com/transmission/transmission/wiki/RPC-Protocol-Specification|RPC
+protocol]] (v17). It assumes familiarity with the
+[[https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt|spec]].
+
+This egg may still work with a more recent version of the spec, but it's not
+guaranteed. An example of a change in the spec that doesn't require any change
+in the API is this:
+
+<enscript>
+17    | 3.01    | yes       | torrent-get          | new arg "file-count"
+17    | 3.01    | yes       | torrent-get          | new arg "primary-mime-type"
+</enscript>
+
+This is because the library doesn't check if the fields are valid (this is
+intentional).
+
+These changes, however:
+
+<enscript>
+16    | 3.00    | yes       | session-get          | new request arg "fields"
+16    | 3.00    | yes       | torrent-get          | new request arg "format"
+</enscript>
+
+Require API changes, because, otherwise, the {{fields}} and {{format}}
+arguments can't be used.
 
 === Author
 
@@ -112,13 +137,13 @@ the values contained in the object, which by default, returns {{#f}}.
 Return the values contained in a result object, whether it's a {{result/error}}
 or {{result/ok}}.
 
-<procedure>(default-error-proc result tag req resp)</procedure>
+<procedure>(default-error-proc result/con #!optional tag req resp)</procedure>
 <procedure>(with-transmission-result result success-proc #!optional (error-proc default-error-proc))</procedure>
 
 Convenient way to handle a single RPC call's result.
 
 {{with-transmission-result}} is similar to {{result-ref}} ({{either-ref}} from
-SRFI-189)), except that the order of the success and failure procedures is
+SRFI-189), except that the order of the success and failure procedures is
 swapped. The failure procedure defaults to {{default-error-proc}}, which calls
 {{error}} with a generic error message.
 
@@ -126,10 +151,13 @@ swapped. The failure procedure defaults to {{default-error-proc}}, which calls
 {{tag}} fields of a reply message, the {{uri-common}} request object, and the
 {{intarweb}} response object.
 
-{{failure-proc}} should be a procedure that accepts 1 or 4 parameters: if only
-one argument is given, it is a condition; if 4 arguments are given, they are
-the {{result}} and {{tag}} fields of a reply message, the {{uri-common}}
-request object, and the {{intarweb}} response object.
+{{failure-proc}} should be a procedure of 4 parameters, 3 of them optional:
+{{result/con}}, {{tag}}, {{req}}, and {{resp}}. {{result}} and {{tag}} are the
+fields of a reply message, {{req}} is the {{uri-common}} request object, and
+{{resp}} is the {{intarweb}} response object. {{tag}}, {{req}}, and {{resp}}
+are either all false or none false. If they're false, {{result/con}} is a
+{{condition}} object thrown during the API call; if they're not false, then
+{{result/con}} is a {{result}} string.
 
 ===== Low-level API
 
@@ -273,6 +301,11 @@ The priority constants -- for {{bandwidth-priority}}.
   For more information, please refer to <http://unlicense.org>
 
 === Version History
+
+==== 0.2.1 (2020/12/DD)
+
+* {{default-error-proc}} now supports the case where the result was just a
+  condition.
 
 ==== 0.2.0 (2020/12/09)
 
