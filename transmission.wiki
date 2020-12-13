@@ -10,7 +10,7 @@ An egg to work with the
 [[https://github.com/transmission/transmission|Transmission]] (v3.01)
 [[https://github.com/transmission/transmission/wiki/RPC-Protocol-Specification|RPC
 protocol]] (v17). It assumes familiarity with the
-[[https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt|spec]].
+[[https://github.com/transmission/transmission/blob/f59118d1fe6a320d797b151a6f235f739ef3b487/extras/rpc-spec.txt|spec]].
 
 This egg may still work with a more recent version of the spec, but it's not
 guaranteed. An example of a change in the spec that doesn't require any change
@@ -258,19 +258,22 @@ The priority constants -- for {{bandwidth-priority}}.
 (parameterize ((*host* "hostname")
                (*username* "username")
                (*password* "password"))
-  (with-transmission-result
-    (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f)
-    (lambda (arguments . _)
-      (define (want-torrent? tor)
-        (alist-let/and tor (downloadDir status uploadRatio)
-                       (and (= status status/seed)
-                            (> uploadRatio 1)
-                            (string=? downloadDir "/some/path/"))))
-      (alist-let/and arguments (torrents)
-                     (let ((wanted-tors (filter want-torrent? (vector->list torrents))))
-                       (for-each print wanted-tors))))
-    (lambda (result . _)
-      (error 'here "torrent-get call failed with the following error" result))))
+  (let ((tag (unique-tag!)))
+    (with-transmission-result
+      (torrent-get '("downloadDir" "id" "name" "status" "uploadRatio") #:ids #f #:tag tag)
+      (lambda (arguments tag req resp)
+        (define (want-torrent? tor)
+          (alist-let/and tor (downloadDir status uploadRatio)
+                         (and (= status status/seed)
+                              (> uploadRatio 1)
+                              (string=? downloadDir "/some/path/"))))
+        (alist-let/and arguments (torrents)
+                       (let ((wanted-tors (filter want-torrent? (vector->list torrents))))
+                         (for-each print wanted-tors))))
+      ; NOTE: The error case handling procedure doesn't have to accept
+      ;       #!optional arguments -- the "missing" arguments will be #f.
+      (lambda (result tag req resp)
+        (error 'here "torrent-get call failed with the following error" result)))))
 </enscript>
 
 === License

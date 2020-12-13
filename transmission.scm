@@ -170,7 +170,12 @@
   ; NOTE: The same as result-ref, except the success and failure procedures are
   ;       flipped.
   (define (with-transmission-result result success-proc #!optional (error-proc default-error-proc))
-    (result-ref result error-proc success-proc))
+    (let ((error-proc
+            (if (eq? error-proc default-error-proc)
+                error-proc
+                (lambda (result/con #!optional tag req resp)
+                  (error-proc result/con tag req resp)))))
+      (result-ref result error-proc success-proc)))
 
   (define ((assert* loc type type?) x)
     (assert

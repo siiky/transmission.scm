@@ -15,5 +15,7 @@
         (alist-let/and arguments (torrents)
                        (let ((wanted-tors (filter want-torrent? (vector->list torrents))))
                          (for-each print wanted-tors))))
+      ; NOTE: The error case handling procedure doesn't have to accept
+      ;       #!optional arguments -- the "missing" arguments will be #f.
       (lambda (result tag req resp)
         (error 'here "torrent-get call failed with the following error" result)))))
