@@ -17,6 +17,7 @@
    alist-keep-keys
    unique-tag!
 
+   alist-let
    alist-let/and
    alist-let/nor
    )
@@ -77,6 +78,10 @@
   ;          (print k1 k2))))
   ;
   ; which is the same as what the original `alist-let/and` expanded to.
+  ;
+  ; TODO:
+  ; - [ ] Allow different types of keys (other than symbols);
+  ; - [ ] Allow different equality predicates;
 
   (define-syntax alist-let
     (syntax-rules ()

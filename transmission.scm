@@ -157,24 +157,21 @@
         (let ((msg (string-append
                      "RPC call "
                      (if (fixnum? tag)
-                         (string-append "with tag " (number->string tag))
+                         (string-append "(tag: " (number->string tag) ") ")
                          "")
-                     " failed with the following error")))
+                     "failed with the following error")))
           (error 'with-transmission-result msg result/con))
 
-        (with-output-to-port
-          (current-error-port)
-          (lambda ()
-            (print-error-message 'with-transmission-result result/con)))))
+        (print-error-message result/con (current-error-port))))
 
   ; NOTE: The same as result-ref, except the success and failure procedures are
   ;       flipped.
-  (define (with-transmission-result result success-proc #!optional (error-proc default-error-proc))
-    (let ((error-proc
-            (if (eq? error-proc default-error-proc)
-                error-proc
-                (lambda (result/con #!optional tag req resp)
-                  (error-proc result/con tag req resp)))))
+  (define (with-transmission-result result success-proc #!optional (error-proc #f))
+    (assert (or (not error-proc) (procedure? error-proc)) "`error-proc` must be a procedure or #f")
+    (let ((error-proc (if error-proc
+                          (lambda (result/con #!optional tag req resp)
+                            (error-proc result/con tag req resp))
+                          default-error-proc)))
       (result-ref result error-proc success-proc)))
 
   (define ((assert* loc type type?) x)

@@ -29,9 +29,10 @@ These changes, however:
 <enscript>
 16    | 3.00    | yes       | session-get          | new request arg "fields"
 16    | 3.00    | yes       | torrent-get          | new request arg "format"
+16    | 3.00    | yes       | torrent-set          | new arg "labels"
 </enscript>
 
-Require API changes, because, otherwise, the {{fields}} and {{format}}
+Require API changes, because otherwise the {{fields}} and {{format}}
 arguments can't be used.
 
 === Author
@@ -211,22 +212,44 @@ is the {{arguments}} object, containing both required and optional arguments.
 
 ==== {{transmission.utils}} module
 
-<syntax>(alist-let alist (key ...) body ...)</syntax>
-<syntax>(alist-let/and alist (key ...) body ...)</syntax>
-<syntax>(alist-let/nor alist (key ...) body ...)</syntax>
+<syntax>(alist-let alist (formal ...) body ...)</syntax>
+<syntax>(alist-let/and alist (formal ...) body ...)</syntax>
+<syntax>(alist-let/nor alist (formal ...) body ...)</syntax>
+
+Where {{formal}} is either {{key}}, which will be used both as the key name and
+the variable, or {{(var key)}}, which will be the variable name and key
+respectively.
 
 Equivalent to:
 
 <enscript highlight="scheme">
-(let ((key (alist-ref 'key alist))
+(let ((var (alist-ref 'key alist))
       ...)
   body
   ...)
 </enscript>
 
-Except that, with {{alist-let/and}}, if {{alist}} is false, the value of the
-whole expression is false; and with {{alist-let/nor}}, if {{alist}} is false,
-the value of the whole expression is true.
+Except that, with {{alist-let/and}}, if {{alist}} is false, the whole
+expression evaluates to false; and with {{alist-let/nor}}, if {{alist}} is
+false, the whole expression evaluates to true.
+
+Example:
+
+<enscript highlight="scheme">
+(alist-let/and '((ant . 3) (bunny . 5) (Cat . 3))
+               (ant bunny (cat Cat))
+  (list ant bunny  cat))
+</enscript>
+
+Expands to something like this:
+
+<enscript highlight="scheme">
+(let ((%alist '((ant . 3) (bunny . 5) (Cat . 3))))
+  (let ((ant (alist-ref 'ant %alist))
+        (bunny (alist-ref 'bunny %alist))
+        (cat (alist-ref 'Cat %alist)))
+  (list ant bunny cat)))
+</enscript>
 
 <procedure>(unique-tag! #!optional (new-n #f))</procedure>
 
@@ -305,10 +328,15 @@ The priority constants -- for {{bandwidth-priority}}.
 
 === Version History
 
-==== 0.2.1 (2020/12/DD)
+==== 0.2.1 (2021/01/10)
 
 * {{default-error-proc}} now supports the case where the result was just a
-  condition.
+  condition;
+
+* Add (hopefully) useful example programs to the {{examples}} directory -- you
+  can get these from the repo or the {{chicken-install}} cache directory;
+
+* Export {{alist-let}} from {{transmission.utils}}.
 
 ==== 0.2.0 (2020/12/09)
 
@@ -317,7 +345,7 @@ The priority constants -- for {{bandwidth-priority}}.
   error for a good result now;
 
 * Improve {{alist-let/and}} and {{alist-let/nor}} to support optional variable
-  names;
+  names, and save the value resulting of evaluating the alist expression;
 
 * Add {{priority}} constants;
 

@@ -16,5 +16,7 @@
 *.types
 
 *.log
-transmission_*
 example
+examples/transmission-labels
+examples/transmission-update-seed-priority
+transmission_*
