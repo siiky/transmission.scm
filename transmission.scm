@@ -67,11 +67,13 @@
           declare
           define-constant
           error
+          exit
           fixnum?
           gensym
           identity
           make-parameter
-          o)
+          o
+          print)
     (only chicken.condition
           condition-case
           get-condition-property
@@ -153,16 +155,21 @@
     (result-ref result fail values))
 
   (define (default-error-proc result/con #!optional tag req resp)
-    (if req
-        (let ((msg (string-append
-                     "RPC call "
-                     (if (fixnum? tag)
-                         (string-append "(tag: " (number->string tag) ") ")
-                         "")
-                     "failed with the following error")))
-          (error 'with-transmission-result msg result/con))
+    (let ((msg (string-append
+                 "RPC call "
+                 (if (fixnum? tag)
+                     (string-append "(tag: " (number->string tag) ") ")
+                     "")
+                 "failed with the following error")))
+      (if req
+          (error 'with-transmission-result msg result/con)
 
-        (print-error-message result/con (current-error-port))))
+          (begin
+            (with-output-to-port (current-error-port)
+                                 (lambda ()
+                                   (print msg)))
+            (print-error-message result/con (current-error-port))
+            (exit 1)))))
 
   ; NOTE: The same as result-ref, except the success and failure procedures are
   ;       flipped.

@@ -275,6 +275,11 @@ The priority constants -- for {{bandwidth-priority}}.
 
 === Examples
 
+The following example lists all the torrents that satisfy a certain predicate:
+they must be seeding, have an upload ratio greater than 1, and the download
+path must be {{/some/path/}} (note that, to Transmission, {{/some/path}} and
+{{/some/path/}} are not the same).
+
 <enscript highlight="scheme">
 (import srfi-1 transmission transmission.utils)
 
@@ -298,6 +303,11 @@ The priority constants -- for {{bandwidth-priority}}.
       (lambda (result tag req resp)
         (error 'here "torrent-get call failed with the following error" result)))))
 </enscript>
+
+For more examples take a look at
+[[https://github.com/siiky/transmission-examples]] (no longer in this egg's
+download directory). The example above is similar to {{transmission-filter}}
+from that repo.
 
 === License
 
