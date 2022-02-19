@@ -194,36 +194,41 @@
   ;;; TODO: How to put this behind a feature, so that comparse and srfi-14 are
   ;;;       optional?
   (define (parse-ids str)
-    (import
-      comparse
-      (only srfi-14
-            char-set:digit
-            char-set:hex-digit))
+    (cond-expand
+      (no-parse (error 'parse-ids "The `transmission` was compiled with the `no-parse` feature."))
 
-    (define (as-number parser)
-      (bind (as-string parser) (o result string->number)))
+      (else
+        (begin
+          (import
+            comparse
+            (only srfi-14
+                  char-set:digit
+                  char-set:hex-digit))
 
-    (define (as-list parser)
-      (bind parser (o result list)))
+          (define (as-number parser)
+            (bind (as-string parser) (o result string->number)))
 
-    (define <hash> (as-string (repeated (in char-set:hex-digit) 40)))
-    (define <number> (as-number (one-or-more (in char-set:digit))))
-    (define number-range
-      (sequence* ((n1 <number>) (n2 (preceded-by (is #\-) <number>)))
-                 (and (< n1 n2)
-                      (result (iota (add1 (- n2 n1)) n1)))))
+          (define (as-list parser)
+            (bind parser (o result list)))
 
-    (define ID (any-of number-range (as-list <hash>) (as-list <number>)))
-    (define IDs-list (sequence* ((h ID) (t (zero-or-more (preceded-by (is #\,) ID))))
-                                ; TODO: Is there a way to improve this?
-                                (result (append h (concatenate t)))))
+          (define <hash> (as-string (repeated (in char-set:hex-digit) 40)))
+          (define <number> (as-number (one-or-more (in char-set:digit))))
+          (define number-range
+            (sequence* ((n1 <number>) (n2 (preceded-by (is #\-) <number>)))
+                       (and (< n1 n2)
+                            (result (iota (add1 (- n2 n1)) n1)))))
 
-    (define <active> (bind (char-seq "active") (constantly (result "recently-active"))))
-    (define <all> (bind (char-seq "all") (constantly (result #f))))
-    (define <none> (bind (char-seq "") (constantly (result '()))))
-    (define IDs-group (any-of <active> <all> <none>))
+          (define ID (any-of number-range (as-list <hash>) (as-list <number>)))
+          (define IDs-list (sequence* ((h ID) (t (zero-or-more (preceded-by (is #\,) ID))))
+                                      ; TODO: Is there a way to improve this?
+                                      (result (append h (concatenate t)))))
 
-    ; TODO: Why does order matter here?
-    (define IDs (any-of IDs-list IDs-group))
+          (define <active> (bind (char-seq "active") (constantly (result "recently-active"))))
+          (define <all> (bind (char-seq "all") (constantly (result #f))))
+          (define <none> (bind (char-seq "") (constantly (result '()))))
+          (define IDs-group (any-of <active> <all> <none>))
 
-    (parse (followed-by IDs end-of-input) (->parser-input str))))
+          ; TODO: Why does order matter here?
+          (define IDs (any-of IDs-list IDs-group))
+
+          (parse (followed-by IDs end-of-input) (->parser-input str)))))))
