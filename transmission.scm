@@ -100,6 +100,7 @@
     ;       alists with symbols as keys, but I assume no one will use this to
     ;       communicate with a transmission instance they don't own, and thus
     ;       possibly malicious...
+    ; TODO: Change the reader to use strings instead?
     (only medea
           json->string
           read-json)

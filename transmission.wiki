@@ -273,7 +273,7 @@ The torrent status constants.
 
 The priority constants -- for {{bandwidth-priority}}.
 
-=== Examples
+=== Example
 
 The following example lists all the torrents that satisfy a certain predicate:
 they must be seeding, have an upload ratio greater than 1, and the download

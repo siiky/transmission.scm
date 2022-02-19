@@ -10,7 +10,7 @@ default: $(EGG_SRC)
 install: $(EGG_SRC)
 	chicken-install
 
-test: $(EGG_SRC)
+test: $(EGG_SRC) tests/run.scm
 	TEST_USE_ANSI=1 chicken-install -test
 
 clean:
