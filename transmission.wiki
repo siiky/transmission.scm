@@ -35,6 +35,11 @@ These changes, however:
 Require API changes, because otherwise the {{fields}} and {{format}}
 arguments can't be used.
 
+'''NOTE:''' This egg uses [[medea]] to read and write JSON, which by default
+reads object keys as symbols. This isn't great, so don't use this library with
+untrusted Transmission clients if you can avoid it. In the future the reader
+will be changed to read the keys as strings instead.
+
 === Author
 
 siiky
