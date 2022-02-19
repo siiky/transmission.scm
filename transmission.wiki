@@ -99,8 +99,8 @@ All optional arguments in the spec are key arguments in the library.
 <procedure>torrent-source/metainfo</procedure>
 
 Create a torrent source to use with {{torrent-add}}. A torrent can be added
-from a magnet URL; or from a torrent file, given the file's path, which must be
-accessible by the Transmission daemon, or the contents of the file, encoded in
+from a magnet URL; from a torrent file, given its path, which must be readable
+by the Transmission daemon; or the contents of the torrent file, encoded in
 Base64.
 
 {{torrent-source/filename}} is used for magnets and file paths;
