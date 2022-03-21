@@ -207,7 +207,7 @@
 
   ;;;
   ;;; RPC Parameters
-  ;;; @see https://github.com/transmission/transmission/wiki/Editing-Configuration-Files#rpc
+  ;;; @see https://github.com/transmission/transmission/blob/6e1b89d9a7bc2e1cf40884d67fbcef3968ed2ff0/docs/Editing-Configuration-Files.md#rpc
   ;;;
 
   (define *host* (make-parameter "localhost" (assert* '*host* "a string" string?)))
@@ -227,7 +227,7 @@
     (make-parameter #f (assert* '*password* "a string or #f" (or? false? string?))))
 
   ;; 2.3.1 X-Transmission-Session-Id
-  ;; @see https://github.com/transmission/transmission/blob/master/extras/rpc-spec.txt
+  ;; @see https://github.com/transmission/transmission/blob/6e1b89d9a7bc2e1cf40884d67fbcef3968ed2ff0/docs/rpc-spec.md#231-csrf-protection
   (define *session-id* (make-parameter "" (assert* '*session-id* "a string" string?)))
 
   ;;;

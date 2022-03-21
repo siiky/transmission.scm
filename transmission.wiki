@@ -7,10 +7,9 @@
 === Description
 
 An egg to work with the
-[[https://github.com/transmission/transmission|Transmission]] (v3.01)
-[[https://github.com/transmission/transmission/wiki/RPC-Protocol-Specification|RPC
-protocol]] (v17). It assumes familiarity with the
-[[https://github.com/transmission/transmission/blob/f59118d1fe6a320d797b151a6f235f739ef3b487/extras/rpc-spec.txt|spec]].
+[[https://github.com/transmission/transmission|Transmission]] (v3.01) RPC
+protocol (v17). It assumes familiarity with the
+[[https://github.com/transmission/transmission/blob/6e1b89d9a7bc2e1cf40884d67fbcef3968ed2ff0/docs/rpc-spec.md#231-csrf-protection|spec]].
 
 This egg may still work with a more recent version of the spec, but it's not
 guaranteed. An example of a change in the spec that doesn't require any change
