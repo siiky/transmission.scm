@@ -70,6 +70,7 @@ The following eggs are required for testing this egg:
 
 ===== Parameters
 
+<parameter>*scheme*</parameter>
 <parameter>*host*</parameter>
 <parameter>*url*</parameter>
 <parameter>*port*</parameter>

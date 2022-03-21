@@ -210,6 +210,8 @@
   ;;; @see https://github.com/transmission/transmission/blob/6e1b89d9a7bc2e1cf40884d67fbcef3968ed2ff0/docs/Editing-Configuration-Files.md#rpc
   ;;;
 
+  (define *scheme* (make-parameter 'http (assert* '*scheme* "'http or 'https" symbol?)))
+
   (define *host* (make-parameter "localhost" (assert* '*host* "a string" string?)))
 
   ;; rpc-url
@@ -238,6 +240,7 @@
   (define deserialize-message read-json)
 
   ;; @brief Create a request object.
+  ;; @param scheme Whether to use HTTP or HTTPS
   ;; @param host The server's hostname.
   ;; @param url See `rpc-url`.
   ;; @param port See `rpc-port`.
@@ -248,11 +251,11 @@
   ;;
   ;; @a username and @a password are only required if
   ;;   `rpc-authentication-required` is enabled in the server.
-  (define (make-rpc-request host url port username password #!optional (session-id (*session-id*)))
+  (define (make-rpc-request scheme host url port username password #!optional (session-id (*session-id*)))
     (make-request
       #:method 'POST
       #:uri (make-uri
-              #:scheme 'http
+              #:scheme scheme
               #:host host
               #:port port
               #:path url
@@ -336,8 +339,8 @@
   ;;
   ;; See the medea egg for how to encode arguments and decode responses.
   (define (rpc-call method #!key (arguments #f) (tag #f))
-    (define (call host url port username password method arguments tag)
-      (let ((req (make-rpc-request host url port username password))
+    (define (call scheme host url port username password method arguments tag)
+      (let ((req (make-rpc-request scheme host url port username password))
             (message (make-serialized-message method arguments tag)))
         (result-ref
           (exception->result
@@ -359,7 +362,8 @@
     (and-let*
       ((host (*host*))
        (url (*url*))
-       (port (*port*)))
+       (port (*port*))
+       (scheme (*scheme*)))
       (let ((username (*username*))
             (password (*password*))
             (arguments (and arguments (not (null? arguments)) arguments)))
@@ -368,7 +372,7 @@
         ;       when a float is sent, so I think only integers are legal.
         (and ((or? false? fixnum?) tag)
              (!xor username password)
-             (call host url port username password method arguments tag)))))
+             (call scheme host url port username password method arguments tag)))))
 
   ;;;
   ;;; General & Common Utilities
