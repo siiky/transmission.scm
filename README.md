@@ -1,7 +1,7 @@
 # transmission.scm
 
-[Transmission][transmission] (v3.01) RPC (v17,
-[rpc-spec.txt][rpc-spec]) in Scheme (CHICKEN 5).
+[Transmission][transmission] (v3.01) RPC (v17, [rpc-spec.txt][rpc-spec]) in
+Scheme (CHICKEN 5). For the docs see the [CHICKEN wiki].
 
 The versions above are the versions that are (supposedly) guaranteed to work.
 They don't mean a later RPC Spec isn't supported. Some changes made to the spec
@@ -129,6 +129,7 @@ have any suggestions, open an issue or make a pull request.
  * [RPC Specification][rpc-spec]
  * [RPC Related Settings][rpc-config]
 
+[CHICKEN wiki]: https://wiki.call-cc.org/eggref/5/transmission
 [rpc-config]: https://github.com/transmission/transmission/blob/6e1b89d9a7bc2e1cf40884d67fbcef3968ed2ff0/docs/Editing-Configuration-Files.md#rpc
 [rpc-spec]: https://github.com/transmission/transmission/blob/6e1b89d9a7bc2e1cf40884d67fbcef3968ed2ff0/docs/rpc-spec.md#231-csrf-protection
 [transmission]: https://github.com/transmission/transmission

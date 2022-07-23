@@ -45,7 +45,7 @@ siiky
 
 === Repository
 
-[[https://github.com/siiky/transmission.scm]]
+[[https://git.sr.ht/~siiky/transmission.scm]]
 
 === Requirements
 
@@ -309,10 +309,9 @@ path must be {{/some/path/}} (note that, to Transmission, {{/some/path}} and
         (error 'here "torrent-get call failed with the following error" result)))))
 </enscript>
 
-For more examples take a look at
-[[https://github.com/siiky/transmission-examples]] (no longer in this egg's
-download directory). The example above is similar to {{transmission-filter}}
-from that repo.
+For more examples take a look at [[https://git.sr.ht/~siiky/trmote]] (no longer
+in this egg's download directory). The example above is similar to
+{{transmission-filter}} from that repo.
 
 === License
 
