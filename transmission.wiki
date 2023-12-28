@@ -342,6 +342,10 @@ in this egg's download directory). The example above is similar to
 
 === Version History
 
+==== 0.3.0 (2023/12/28)
+
+* Add {{trackerList}} to {{torrent-set}}.
+
 ==== 0.2.2 (2022/03/21)
 
 * Add {{*scheme*}} parameter to support HTTPS as well.
