@@ -645,6 +645,7 @@
     (tracker-add           #f      (make-array->argument  'trackerAdd))
     (tracker-remove        #f      (make-array->argument  'trackerRemove))
     (tracker-replace       #f      (make-array->argument  'trackerReplace))
+    (tracker-list          #f      (make-string->argument 'trackerList))
     (upload-limit          #f      (make-number->argument 'uploadLimit))
     (upload-limited        nothing (make-bool->argument   'uploadLimited)))
 
