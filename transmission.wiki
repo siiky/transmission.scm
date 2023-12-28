@@ -9,7 +9,7 @@
 An egg to work with the
 [[https://github.com/transmission/transmission|Transmission]] (v3.01) RPC
 protocol (v17). It assumes familiarity with the
-[[https://github.com/transmission/transmission/blob/6e1b89d9a7bc2e1cf40884d67fbcef3968ed2ff0/docs/rpc-spec.md#231-csrf-protection|spec]].
+[[https://github.com/transmission/transmission/blob/e80ec7b7a440afac086b57543a5c9cb0a75e9683/docs/rpc-spec.md|spec]].
 
 This egg may still work with a more recent version of the spec, but it's not
 guaranteed. An example of a change in the spec that doesn't require any change
